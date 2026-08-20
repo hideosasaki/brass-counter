@@ -5,7 +5,7 @@ import { database } from "../firebaseConfig";
 import { CITIES, MERCHANTS, FARM_BREWERIES, LINKS } from "../boardData";
 import { scoreLinksFromIcons } from "../scoring";
 import { APP_COLOR_CLASS, linkSamplePoints, CANONICAL_SIZE } from "./classifier";
-import { ensureEngine, scanPhoto, ScanError } from "./pipeline";
+import { ensureEngine, scanPhoto, ScanError, CLOSE_PAIRS } from "./pipeline";
 import "bootstrap/dist/css/bootstrap.min.css";
 
 const CLASS_HEX = Object.fromEntries(
@@ -293,6 +293,21 @@ function Scan() {
     (scan ? scan.links : []).map((l) => [l.linkId, l.eraValid])
   );
 
+  // If this link and a close neighbour both detected something, the tile in
+  // the preview may actually belong to the neighbour.
+  const crosstalkNeighbor = (linkId) => {
+    const r = linkResultById[linkId];
+    if (!r || r.frac < 0.12) return null;
+    for (const [a, b] of CLOSE_PAIRS) {
+      if (a === linkId || b === linkId) {
+        const other = a === linkId ? b : a;
+        const ro = linkResultById[other];
+        if (ro && ro.frac >= 0.12) return other;
+      }
+    }
+    return null;
+  };
+
   // Shown on review cards during the beta so field reports can tell us why
   // something was flagged.
   const debugLine = (linkId) => {
@@ -320,6 +335,12 @@ function Scan() {
           This link cannot be built in the {era} era. If a tile is shown here,
           it probably belongs to a neighbouring link — choose Empty and assign
           it on the map. Only pick a color if it was really built here.
+        </div>
+      ) : crosstalkNeighbor(linkId) ? (
+        <div className="alert alert-warning py-2 my-2">
+          The tile shown may belong to the adjacent{" "}
+          {linkLabel(crosstalkNeighbor(linkId))} link. Pick a color only if it
+          sits on {linkLabel(linkId)}; otherwise choose Empty.
         </div>
       ) : (
         <div className="text-secondary mb-2">Whose link is this?</div>

@@ -27,7 +27,9 @@ export const APP_COLOR_CLASS = {
 
 const MASK_SCORE_THRESHOLD = 28;
 const PROTO_MAX_DIST = 0.05;
-const AUTO_MIN_FRAC = 0.15;
+// Colored detections need this much mass to auto-assign. Banner-and-fold
+// ghosts measured 0.14-0.18 in the field; real tiles measure >= 0.19.
+const AUTO_MIN_FRAC = 0.2;
 const AUTO_MAX_DIST = 0.04;
 const AUTO_MIN_MARGIN = 0.02;
 // Real tiles measured frac >= 0.17 in ground truth; sub-0.12 detections are
