@@ -2,7 +2,7 @@ import React, { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { ref, get } from "firebase/database";
 import { database } from "../firebaseConfig";
-import { CITIES, MERCHANTS, FARM_BREWERIES, LINKS } from "../boardData";
+import { CITIES, MERCHANTS, FARM_BREWERIES, LINKS, REGION_COLORS } from "../boardData";
 import { scoreLinksFromIcons } from "../scoring";
 import { APP_COLOR_CLASS, linkSamplePoints, CANONICAL_SIZE } from "./classifier";
 import { ensureEngine, scanPhoto, ScanError, CLOSE_PAIRS } from "./pipeline";
@@ -22,15 +22,52 @@ const LINKS_BY_ID = Object.fromEntries(LINKS.map((l) => [l.id, l]));
 
 const STAGES = [
   ["load", "Loading recognition engine (first time: ~10MB)"],
-  ["detect", "Detecting board features"],
-  ["side", "Matching board side"],
-  ["warp", "Correcting perspective"],
-  ["classify", "Reading link tiles"],
+  ["detect", "Finding and matching the board"],
+  ["warp", "Correcting and reading the board"],
 ];
+// The pipeline reports five stages; the last four pass too quickly to be
+// worth separate rows.
+const STAGE_ALIAS = { side: "detect", classify: "warp" };
 
 function linkLabel(linkId) {
   const locs = LINKS_BY_ID[linkId].locations.filter((l) => !FARM_BREWERIES[l]);
   return locs.map((l) => LOCATION_NAMES[l]).join(" – ");
+}
+
+// City names as they appear on the board: uppercase on their region-colored
+// name banner, so they are easy to find on the physical board.
+function LocationName({ id }) {
+  const region = CITIES[id]
+    ? CITIES[id].region
+    : MERCHANTS[id]
+    ? "merchant"
+    : "farm";
+  const bg = REGION_COLORS[region];
+  return (
+    <span
+      className="d-inline-block rounded px-2 me-1 mb-1"
+      style={{
+        backgroundColor: bg,
+        color: region === "merchant" ? "#26221c" : "#fff",
+        textTransform: "uppercase",
+        fontSize: "0.85em",
+        letterSpacing: "0.03em",
+      }}
+    >
+      {LOCATION_NAMES[id]}
+    </span>
+  );
+}
+
+function LinkName({ linkId }) {
+  const locs = LINKS_BY_ID[linkId].locations.filter((l) => !FARM_BREWERIES[l]);
+  return (
+    <span>
+      {locs.map((l) => (
+        <LocationName key={l} id={l} />
+      ))}
+    </span>
+  );
 }
 
 // Where the tile actually sits: the calibrated point, shifted to the
@@ -86,6 +123,27 @@ function Scan() {
     });
   }, [gameId, navigate]);
 
+  // Every step gets its own history entry so the browser back gesture walks
+  // back through the flow (previous review card, previous screen) instead of
+  // leaving the scanner.
+  const applyStep = (s) => {
+    setPhase(s.phase);
+    setReviewIndex(s.reviewIndex || 0);
+    setEditingLink(s.editingLink || null);
+  };
+  const goTo = (s) => {
+    window.history.pushState({ scanStep: s }, "");
+    applyStep(s);
+  };
+  useEffect(() => {
+    const onPop = (e) => {
+      if (e.state && e.state.scanStep) applyStep(e.state.scanStep);
+    };
+    window.addEventListener("popstate", onPop);
+    window.history.replaceState({ scanStep: { phase: "setup" } }, "");
+    return () => window.removeEventListener("popstate", onPop);
+  }, []);
+
   const sessionClasses = useMemo(
     () => (players || []).map((p) => APP_COLOR_CLASS[p.color]).filter(Boolean),
     [players]
@@ -106,7 +164,7 @@ function Scan() {
       const result = await scanPhoto(file, {
         era,
         allowed: sessionClasses,
-        onStage: setStage,
+        onStage: (s) => setStage(STAGE_ALIAS[s] || s),
       });
       const initial = {};
       for (const l of result.links) initial[l.linkId] = l.color;
@@ -115,8 +173,7 @@ function Scan() {
       setBoardUrl(result.canvas.toDataURL("image/jpeg", 0.7));
       const queue = result.links.filter((l) => l.state === "review").map((l) => l.linkId);
       setReviewIds(queue);
-      setReviewIndex(0);
-      setPhase(queue.length ? "review" : "map");
+      goTo(queue.length ? { phase: "review", reviewIndex: 0 } : { phase: "map" });
     } catch (err) {
       setError(err instanceof ScanError ? err.code : "failed");
       setPhase("error");
@@ -126,11 +183,11 @@ function Scan() {
   const assign = (linkId, cls) => {
     setAssignments((a) => ({ ...a, [linkId]: cls }));
     if (editingLink) {
-      setEditingLink(null);
+      goTo({ phase: "map" });
     } else if (reviewIndex + 1 < reviewIds.length) {
-      setReviewIndex(reviewIndex + 1);
+      goTo({ phase: "review", reviewIndex: reviewIndex + 1 });
     } else {
-      setPhase("map");
+      goTo({ phase: "map" });
     }
   };
 
@@ -329,7 +386,7 @@ function Scan() {
         className="w-100 rounded border mb-2"
         style={{ maxHeight: "40vh", objectFit: "cover" }}
       />
-      <div className="fw-bold">{linkLabel(linkId)}</div>
+      <div className="fw-bold"><LinkName linkId={linkId} /></div>
       {eraValidById[linkId] === false ? (
         <div className="alert alert-warning py-2 my-2">
           This link cannot be built in the {era} era. If a tile is shown here,
@@ -339,8 +396,9 @@ function Scan() {
       ) : crosstalkNeighbor(linkId) ? (
         <div className="alert alert-warning py-2 my-2">
           The tile shown may belong to the adjacent{" "}
-          {linkLabel(crosstalkNeighbor(linkId))} link. Pick a color only if it
-          sits on {linkLabel(linkId)}; otherwise choose Empty.
+          <LinkName linkId={crosstalkNeighbor(linkId)} /> link. Pick a color
+          only if it sits on <LinkName linkId={linkId} />; otherwise choose
+          Empty.
         </div>
       ) : (
         <div className="text-secondary mb-2">Whose link is this?</div>
@@ -375,7 +433,7 @@ function Scan() {
               <button
                 key={link.id}
                 aria-label={linkLabel(link.id)}
-                onClick={() => setEditingLink(link.id)}
+                onClick={() => goTo({ phase: "map", editingLink: link.id })}
                 className="position-absolute p-0 border rounded-circle"
                 style={{
                   left: `${nx * 100}%`,
@@ -391,10 +449,10 @@ function Scan() {
           })}
         </div>
         <div className="d-grid gap-2">
-          <button className="btn btn-primary btn-lg" onClick={() => setPhase("icons")}>
+          <button className="btn btn-primary btn-lg" onClick={() => goTo({ phase: "icons" })}>
             Next: link icons
           </button>
-          <button className="btn btn-outline-secondary" onClick={() => setPhase("setup")}>
+          <button className="btn btn-outline-secondary" onClick={() => goTo({ phase: "setup" })}>
             Rescan
           </button>
           <button
@@ -462,7 +520,7 @@ function Scan() {
         {iconLocations.map((loc) => (
           <div key={loc} className="card mb-2">
             <div className="card-body d-flex justify-content-between align-items-center py-2">
-              <span>{LOCATION_NAMES[loc]}</span>
+              <span><LocationName id={loc} /></span>
               <span className="btn-group">
                 <button
                   className="btn btn-dark"
@@ -487,10 +545,10 @@ function Scan() {
           <div className="alert alert-secondary">No owned links were found.</div>
         )}
         <div className="d-grid gap-2 mt-3">
-          <button className="btn btn-primary btn-lg" onClick={() => setPhase("result")}>
+          <button className="btn btn-primary btn-lg" onClick={() => goTo({ phase: "result" })}>
             Calculate
           </button>
-          <button className="btn btn-outline-secondary" onClick={() => setPhase("map")}>
+          <button className="btn btn-outline-secondary" onClick={() => window.history.back()}>
             Back
           </button>
         </div>
@@ -528,7 +586,7 @@ function Scan() {
                   className="d-inline-block rounded me-2"
                   style={{ width: 12, height: 12, backgroundColor: CLASS_HEX[player] }}
                 />
-                {linkLabel(linkId)}
+                <LinkName linkId={linkId} />
               </span>
               <span className="fw-bold">{linkVp(linkId)}</span>
             </li>
@@ -542,7 +600,7 @@ function Scan() {
         <button className="btn btn-primary" onClick={() => navigate(`/game/${gameId}`)}>
           Done
         </button>
-        <button className="btn btn-outline-secondary" onClick={() => setPhase("icons")}>
+        <button className="btn btn-outline-secondary" onClick={() => window.history.back()}>
           Back
         </button>
       </div>
