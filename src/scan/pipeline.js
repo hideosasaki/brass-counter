@@ -176,6 +176,26 @@ export async function scanPhoto(file, { era, allowed, onStage }) {
   return { side: best.side, inliers: best.inliers, canvas, links: results };
 }
 
+// Pairs of links whose sample points sit so close together that a tile on
+// one can bleed into the other's patch. When both fire, a machine cannot
+// tell one-real-plus-crosstalk from two real tiles, so both go to review.
+const CLOSE_PAIR_DIST = 0.055; // in normalized board units (~113px at 2048)
+
+export const CLOSE_PAIRS = (() => {
+  const pairs = [];
+  for (let i = 0; i < LINKS.length; i++) {
+    for (let j = i + 1; j < LINKS.length; j++) {
+      const a = linkSamplePoints(LINKS[i].id);
+      const b = linkSamplePoints(LINKS[j].id);
+      const close = a.some(([ax, ay]) =>
+        b.some(([bx, by]) => Math.hypot(ax - bx, ay - by) < CLOSE_PAIR_DIST)
+      );
+      if (close) pairs.push([LINKS[i].id, LINKS[j].id]);
+    }
+  }
+  return pairs;
+})();
+
 // Pure of OpenCV: classify all 39 link positions on the canonical frame.
 export function classifyAllLinks(warpedData, { era, allowed, side }) {
   const refPatchStore = getRefPatches(side);
@@ -191,7 +211,7 @@ export function classifyAllLinks(warpedData, { era, allowed, side }) {
     }));
   }
   const gain = fitGain(Object.values(pairsById).flat());
-  return LINKS.map((link) => {
+  const out = LINKS.map((link) => {
     const eraValid = era === "canal" ? link.canal : link.rail;
     const results = pairsById[link.id].map(({ pc, rc }) =>
       classifyPatch(pc, rc, gain)
@@ -199,18 +219,49 @@ export function classifyAllLinks(warpedData, { era, allowed, side }) {
     if (!eraValid) {
       // This link cannot exist this era. A strong detection here usually
       // means a neighbouring link's tile drifted -> let the human place it.
-      const frac = Math.max(...results.map((r) => r.frac));
+      const bestIndex = results.reduce(
+        (a, _, i) => (results[i].frac > results[a].frac ? i : a), 0);
+      const { frac, centroid } = results[bestIndex];
       return {
         linkId: link.id,
         eraValid,
         state: frac >= 0.12 ? "review" : "auto",
         color: null,
         frac,
+        bestIndex,
+        centroid,
       };
     }
     return { linkId: link.id, eraValid, ...decideLink({ results, allowed, side }) };
   });
+  const byId = Object.fromEntries(out.map((r) => [r.linkId, r]));
+  const globalCentroid = (r) => {
+    const [nx, ny] = linkSamplePoints(r.linkId)[r.bestIndex || 0];
+    return [
+      nx * CANONICAL_SIZE + (r.centroid ? r.centroid[0] : 0),
+      ny * CANONICAL_SIZE + (r.centroid ? r.centroid[1] : 0),
+    ];
+  };
+  for (const [a, b] of CLOSE_PAIRS) {
+    const ra = byId[a], rb = byId[b];
+    if (ra.frac >= 0.12 && rb.frac >= 0.12) {
+      // Both patches fire. If their mask centroids point at the same spot on
+      // the board, it is one tile seen from two patches; a machine cannot
+      // decide which link owns it, so both go to review. Two clearly
+      // separate blobs are two tiles and stay as decided.
+      const [ax, ay] = globalCentroid(ra);
+      const [bx, by] = globalCentroid(rb);
+      if (Math.hypot(ax - bx, ay - by) < SHARED_BLOB_DIST) {
+        for (const r of [ra, rb]) {
+          if (r.state === "auto" && r.color) r.state = "review";
+        }
+      }
+    }
+  }
+  return out;
 }
+
+const SHARED_BLOB_DIST = 55; // canonical px between the two mask centroids
 
 // Reference patches (cell grids at every link sample point), computed once
 // per side from a small hidden canvas of the reference... but we do not ship

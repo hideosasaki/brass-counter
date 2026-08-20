@@ -107,6 +107,7 @@ export function classifyPatch(pc, rc, gain) {
   const medDy = sorted[(sorted.length / 2) | 0];
   const masked = [];
   let cellsInDisc = 0;
+  let sumX = 0, sumY = 0;
   for (let i = 0; i < pc.length; i++) {
     const gx = i % n, gy = (i / n) | 0;
     const px = gx * CELL + CELL / 2 - PATCH_HALF;
@@ -118,9 +119,18 @@ export function classifyPatch(pc, rc, gain) {
     const [ru, rv] = chroma(rc[i]);
     const dChroma = Math.hypot(pu - ru, pv - rv) * 500;
     const dLuma = Math.abs(dys[i] - medDy);
-    if (dChroma + dLuma * 0.4 > MASK_SCORE_THRESHOLD) masked.push(c);
+    if (dChroma + dLuma * 0.4 > MASK_SCORE_THRESHOLD) {
+      masked.push(c);
+      sumX += px; sumY += py;
+    }
   }
-  return { frac: cellsInDisc ? masked.length / cellsInDisc : 0, masked };
+  // Mask centroid (relative to the patch center). Comparing centroids of
+  // neighbouring patches in board coordinates tells one shared blob apart
+  // from two separate tiles.
+  const centroid = masked.length
+    ? [sumX / masked.length, sumY / masked.length]
+    : [0, 0];
+  return { frac: cellsInDisc ? masked.length / cellsInDisc : 0, masked, centroid };
 }
 
 function nearestProto(mean, side, allowed) {
@@ -138,9 +148,10 @@ function nearestProto(mean, side, allowed) {
 // Three-way decision for one link from its sample-point results.
 // state: "auto" (trusted) or "review" (ask the human). color: class or null.
 export function decideLink({ results, allowed, side }) {
-  const { frac, masked } = results.reduce((a, b) => (b.frac > a.frac ? b : a));
+  const bestIndex = results.reduce((a, b, i) => (results[i].frac > results[a].frac ? i : a), 0);
+  const { frac, masked, centroid } = results[bestIndex];
   if (frac < DETECT_MIN_FRAC) {
-    return { state: "auto", color: null, frac };
+    return { state: "auto", color: null, frac, bestIndex, centroid };
   }
   const mean = masked
     .reduce((a, c) => a.map((v, k) => v + c[k]), [0, 0, 0])
@@ -154,5 +165,5 @@ export function decideLink({ results, allowed, side }) {
   } else if (frac < AUTO_MIN_FRAC || bestD > AUTO_MAX_DIST || margin < AUTO_MIN_MARGIN) {
     state = "review";
   }
-  return { state, color, frac, dist: bestD, margin };
+  return { state, color, frac, dist: bestD, margin, bestIndex, centroid };
 }
