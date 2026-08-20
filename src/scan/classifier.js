@@ -34,6 +34,7 @@ const AUTO_MIN_MARGIN = 0.02;
 // noise (glare, print differences) and are dropped without asking.
 const DETECT_MIN_FRAC = 0.12;
 const UNMATCHED_EMPTY_MAX_FRAC = 0.3;
+const UNMATCHED_REVIEW_MAX_DIST = 0.09;
 
 export function linkSamplePoints(linkId) {
   const pos = LINK_POSITIONS[linkId];
@@ -48,18 +49,23 @@ export function parseRefBin(buffer) {
   return { n, pts, desc };
 }
 
+// A single global homography cannot model the bulge of a folded board; the
+// residual misalignment (up to ~25px) makes high-contrast art ghost into the
+// diff. Patches are therefore re-aligned locally before diffing.
+export const ALIGN_MARGIN = 24; // px search radius, must be a multiple of CELL
+
 // Block-average an image region centered at (cx, cy) into cells of mean RGB.
-export function cellGrid(imageData, cx, cy) {
+export function cellGrid(imageData, cx, cy, halfSize = PATCH_HALF) {
   const { data, width, height } = imageData;
-  const n = (2 * PATCH_HALF) / CELL;
+  const n = (2 * halfSize) / CELL;
   const cells = [];
   for (let gy = 0; gy < n; gy++) {
     for (let gx = 0; gx < n; gx++) {
       let r = 0, g = 0, b = 0, k = 0;
       for (let dy = 0; dy < CELL; dy += 2) {
         for (let dx = 0; dx < CELL; dx += 2) {
-          const x = cx - PATCH_HALF + gx * CELL + dx;
-          const y = cy - PATCH_HALF + gy * CELL + dy;
+          const x = cx - halfSize + gx * CELL + dx;
+          const y = cy - halfSize + gy * CELL + dy;
           if (x < 0 || y < 0 || x >= width || y >= height) continue;
           const i = (y * width + x) * 4;
           r += data[i]; g += data[i + 1]; b += data[i + 2]; k++;
@@ -92,6 +98,42 @@ export function fitGain(patchPairs) {
 }
 
 const luma = ([r, g, b]) => 0.299 * r + 0.587 * g + 0.114 * b;
+
+// Pick the sub-grid of an enlarged scan patch that best matches the
+// reference patch (zero-mean luma correlation over cell shifts), undoing the
+// local residual of the global homography.
+export function alignPatch(pcLarge, rc) {
+  const nRef = Math.sqrt(rc.length) | 0;
+  const nLarge = Math.sqrt(pcLarge.length) | 0;
+  const m = (nLarge - nRef) / 2;
+  const lumaL = pcLarge.map(luma);
+  const lumaR = rc.map(luma);
+  const meanR = lumaR.reduce((a, b) => a + b, 0) / lumaR.length;
+  let best = null, bestScore = -Infinity;
+  for (let sy = 0; sy <= 2 * m; sy++) {
+    for (let sx = 0; sx <= 2 * m; sx++) {
+      let sum = 0;
+      for (let i = 0; i < lumaR.length; i++) {
+        const gx = i % nRef, gy = (i / nRef) | 0;
+        sum += lumaL[(gy + sy) * nLarge + (gx + sx)];
+      }
+      const meanL = sum / lumaR.length;
+      let corr = 0;
+      for (let i = 0; i < lumaR.length; i++) {
+        const gx = i % nRef, gy = (i / nRef) | 0;
+        corr += (lumaL[(gy + sy) * nLarge + (gx + sx)] - meanL) * (lumaR[i] - meanR);
+      }
+      if (corr > bestScore) { bestScore = corr; best = [sx, sy]; }
+    }
+  }
+  const [sx, sy] = best;
+  const out = new Array(rc.length);
+  for (let i = 0; i < rc.length; i++) {
+    const gx = i % nRef, gy = (i / nRef) | 0;
+    out[i] = pcLarge[(gy + sy) * nLarge + (gx + sx)];
+  }
+  return out;
+}
 const chroma = ([r, g, b]) => {
   const s = r + g + b + 1e-6;
   return [r / s, g / s];
@@ -165,8 +207,12 @@ export function decideLink({ results, allowed, side, chromaOffset = [0, 0] }) {
   const color = bestD <= PROTO_MAX_DIST ? best : null;
   let state = "auto";
   if (color === null) {
-    // Not any session color: glare or a foreign object. Empty unless huge.
-    if (frac >= UNMATCHED_EMPTY_MAX_FRAC) state = "review";
+    // Not any session color: glare or a foreign object. Ask only when it is
+    // both large and vaguely tile-colored; far-off chroma (a blue window
+    // reflection) is never a tile, whatever its size.
+    if (frac >= UNMATCHED_EMPTY_MAX_FRAC && bestD < UNMATCHED_REVIEW_MAX_DIST) {
+      state = "review";
+    }
   } else if (frac < AUTO_MIN_FRAC || bestD > AUTO_MAX_DIST || margin < AUTO_MIN_MARGIN) {
     state = "review";
   }

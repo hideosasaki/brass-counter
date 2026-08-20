@@ -8,10 +8,13 @@ import {
   parseRefBin,
   linkSamplePoints,
   cellGrid,
+  alignPatch,
   fitGain,
   classifyPatch,
   decideLink,
   estimateChromaOffset,
+  PATCH_HALF,
+  ALIGN_MARGIN,
 } from "./classifier";
 
 const MAX_PHOTO_DIM = 2000;
@@ -202,14 +205,16 @@ export function classifyAllLinks(warpedData, { era, allowed, side }) {
   const refPatchStore = getRefPatches(side);
   const pairsById = {};
   for (const link of LINKS) {
-    pairsById[link.id] = linkSamplePoints(link.id).map(([nx, ny], i) => ({
-      pc: cellGrid(
+    pairsById[link.id] = linkSamplePoints(link.id).map(([nx, ny], i) => {
+      const rc = refPatchStore[link.id][i];
+      const pcLarge = cellGrid(
         warpedData,
         Math.round(nx * CANONICAL_SIZE),
-        Math.round(ny * CANONICAL_SIZE)
-      ),
-      rc: refPatchStore[link.id][i],
-    }));
+        Math.round(ny * CANONICAL_SIZE),
+        PATCH_HALF + ALIGN_MARGIN
+      );
+      return { pc: alignPatch(pcLarge, rc), rc };
+    });
   }
   const gain = fitGain(Object.values(pairsById).flat());
   // First pass without adaptation, only to estimate this scan's color tint
