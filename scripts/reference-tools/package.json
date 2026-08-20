@@ -1,0 +1,9 @@
+{
+  "name": "reference-tools",
+  "private": true,
+  "description": "Node tools to build and verify the canonical board references for photo scanning",
+  "dependencies": {
+    "@techstark/opencv-js": "^5.0.0-release.1",
+    "jimp": "^0.22.12"
+  }
+}
