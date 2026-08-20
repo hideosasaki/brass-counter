@@ -18,11 +18,14 @@ const firebaseConfig = {
 
 const app = initializeApp(firebaseConfig);
 
-getAnalytics(app);
-
-initializeAppCheck(app, {
-  provider: new ReCaptchaV3Provider("6LfzUiYqAAAAAGb6hgidzGqcNsJCZY0xNvVPy59S"),
-  isTokenAutoRefreshEnabled: true,
-});
+// Analytics and App Check only make sense on the deployed site; on dev hosts
+// they just spam the console (blocked gtag, reCAPTCHA domain mismatch).
+if (process.env.NODE_ENV === "production") {
+  getAnalytics(app);
+  initializeAppCheck(app, {
+    provider: new ReCaptchaV3Provider("6LfzUiYqAAAAAGb6hgidzGqcNsJCZY0xNvVPy59S"),
+    isTokenAutoRefreshEnabled: true,
+  });
+}
 
 export const database = getDatabase(app);
