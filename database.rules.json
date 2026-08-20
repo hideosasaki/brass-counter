@@ -1,0 +1,37 @@
+{
+  "rules": {
+    ".read": false,
+    ".write": false,
+    "games": {
+      "$gameId": {
+        ".read": "$gameId.matches(/^[a-z0-9]{6}$/)",
+        ".write": "$gameId.matches(/^[a-z0-9]{6}$/)",
+        "lastActive": {
+          ".validate": "newData.isString() && newData.val().length < 40"
+        },
+        "players": {
+          "$playerId": {
+            "color": {
+              ".validate": "newData.isString() && newData.val().length <= 7"
+            },
+            "money": {
+              ".validate": "newData.isNumber() && newData.val() >= 0 && newData.val() <= 999"
+            },
+            "spent": {
+              ".validate": "newData.isNumber() && newData.val() >= 0 && newData.val() <= 999"
+            },
+            "incomePosition": {
+              ".validate": "newData.isNumber() && newData.val() >= 0 && newData.val() <= 99"
+            },
+            "$other": {
+              ".validate": false
+            }
+          }
+        },
+        "$other": {
+          ".validate": false
+        }
+      }
+    }
+  }
+}
