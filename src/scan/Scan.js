@@ -74,6 +74,7 @@ function Scan() {
   const [editingLink, setEditingLink] = useState(null); // from map view
   const [icons, setIcons] = useState({});
   const [boardUrl, setBoardUrl] = useState(null);
+  const [debugReport, setDebugReport] = useState(null);
   const fileInput = useRef(null);
 
   useEffect(() => {
@@ -379,13 +380,28 @@ function Scan() {
                   margin: margin !== undefined && margin < 1 ? Number(margin.toFixed(3)) : undefined,
                 })),
               };
-              navigator.clipboard
-                .writeText(JSON.stringify(report))
-                .then(() => window.alert("Debug report copied"));
+              const text = JSON.stringify(report);
+              if (navigator.clipboard && window.isSecureContext) {
+                navigator.clipboard
+                  .writeText(text)
+                  .then(() => window.alert("Debug report copied"));
+              } else {
+                // http:// dev server has no clipboard API; show the text
+                setDebugReport(text);
+              }
             }}
           >
             Copy debug report
           </button>
+          {debugReport && (
+            <textarea
+              readOnly
+              className="form-control font-monospace"
+              style={{ fontSize: 10, height: 140 }}
+              value={debugReport}
+              onFocus={(e) => e.target.select()}
+            />
+          )}
         </div>
       </div>
     );
