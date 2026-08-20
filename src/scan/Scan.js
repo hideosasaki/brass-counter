@@ -63,8 +63,11 @@ function LinkName({ linkId }) {
   const locs = LINKS_BY_ID[linkId].locations.filter((l) => !FARM_BREWERIES[l]);
   return (
     <span>
-      {locs.map((l) => (
-        <LocationName key={l} id={l} />
+      {locs.map((l, i) => (
+        <React.Fragment key={l}>
+          {i > 0 && <span className="mx-1">–</span>}
+          <LocationName id={l} />
+        </React.Fragment>
       ))}
     </span>
   );
@@ -386,7 +389,7 @@ function Scan() {
         className="w-100 rounded border mb-2"
         style={{ maxHeight: "40vh", objectFit: "cover" }}
       />
-      <div className="fw-bold"><LinkName linkId={linkId} /></div>
+      <div className="fw-bold fs-5"><LinkName linkId={linkId} /></div>
       {eraValidById[linkId] === false ? (
         <div className="alert alert-warning py-2 my-2">
           This link cannot be built in the {era} era. If a tile is shown here,
