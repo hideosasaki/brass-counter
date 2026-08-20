@@ -260,9 +260,24 @@ function Scan() {
   }
 
   // ---- review queue / single edit ------------------------------------------
+  const linkResultById = Object.fromEntries(
+    (scan ? scan.links : []).map((l) => [l.linkId, l])
+  );
   const eraValidById = Object.fromEntries(
     (scan ? scan.links : []).map((l) => [l.linkId, l.eraValid])
   );
+
+  // Shown on review cards during the beta so field reports can tell us why
+  // something was flagged.
+  const debugLine = (linkId) => {
+    const r = linkResultById[linkId];
+    if (!r) return null;
+    const parts = [`frac ${r.frac.toFixed(2)}`];
+    if (r.dist !== undefined) parts.push(`d ${r.dist.toFixed(3)}`);
+    if (r.margin !== undefined && r.margin < 1) parts.push(`m ${r.margin.toFixed(3)}`);
+    if (r.color) parts.push(`guess ${r.color}`);
+    return parts.join(" · ");
+  };
 
   const cardFor = (linkId, heading) => (
     <div className="container mt-3" style={{ maxWidth: 480 }}>
@@ -284,6 +299,7 @@ function Scan() {
         <div className="text-secondary mb-2">Whose link is this?</div>
       )}
       {colorButtons(linkId)}
+      <div className="text-secondary small mt-2">{debugLine(linkId)}</div>
     </div>
   );
 
