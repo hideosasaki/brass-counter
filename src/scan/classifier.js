@@ -224,8 +224,10 @@ export function decideLink({ results, allowed, side, chromaOffset = [0, 0] }) {
 // Estimate the scan-wide chroma tint from confident first-pass detections:
 // the mean deviation of their blobs from their matched prototypes.
 export function estimateChromaOffset(firstPass, side) {
+  // Only strong tiles qualify: banner/fold ghosts measured up to ~0.25 frac
+  // and can look chromatically perfect, so they must not steer the offset.
   const confident = firstPass.filter(
-    (r) => r.color && r.dist < 0.035 && r.frac >= 0.2 && r.uv
+    (r) => r.color && r.dist < 0.035 && r.frac >= 0.3 && r.uv
   );
   if (!confident.length) return [0, 0];
   let du = 0, dv = 0;

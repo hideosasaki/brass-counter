@@ -79,16 +79,52 @@ export class ScanError extends Error {
   }
 }
 
+// Decode the photo with jpeg-js, NOT the browser's image pipeline. Phone
+// photos are wide-gamut (Display P3); Safari color-converts them when drawing
+// to a canvas, but the reference data was built from raw JPEG samples with no
+// conversion. Classifying converted pixels against unconverted references
+// warps the chroma nonlinearly and creates ghosts, so both sides must read
+// the raw samples the same way.
 async function fileToImageData(file) {
-  const bitmap = await createImageBitmap(file);
-  const scale = Math.min(1, MAX_PHOTO_DIM / Math.max(bitmap.width, bitmap.height));
-  const w = Math.round(bitmap.width * scale);
-  const h = Math.round(bitmap.height * scale);
-  const canvas = document.createElement("canvas");
-  canvas.width = w;
-  canvas.height = h;
-  const ctx = canvas.getContext("2d");
-  ctx.drawImage(bitmap, 0, 0, w, h);
+  const isJpeg =
+    file.type === "image/jpeg" || /\.jpe?g$/i.test(file.name || "");
+  let raw;
+  if (isJpeg) {
+    const { default: jpeg } = await import("jpeg-js");
+    raw = jpeg.decode(new Uint8Array(await file.arrayBuffer()), {
+      useTArray: true,
+      formatAsRGBA: true,
+      maxMemoryUsageInMB: 512,
+    });
+  } else {
+    // Non-JPEG input (rare): fall back to the browser decoder.
+    const bitmap = await createImageBitmap(file);
+    const c = document.createElement("canvas");
+    c.width = bitmap.width;
+    c.height = bitmap.height;
+    const cx = c.getContext("2d");
+    cx.drawImage(bitmap, 0, 0);
+    raw = cx.getImageData(0, 0, c.width, c.height);
+  }
+  const scale = Math.min(1, MAX_PHOTO_DIM / Math.max(raw.width, raw.height));
+  if (scale === 1) {
+    return { data: new Uint8ClampedArray(raw.data), width: raw.width, height: raw.height };
+  }
+  // Downscale via canvases; pixel data in and out of a canvas of the same
+  // color space is not color-managed, so the raw samples survive.
+  const full = document.createElement("canvas");
+  full.width = raw.width;
+  full.height = raw.height;
+  full
+    .getContext("2d")
+    .putImageData(new ImageData(new Uint8ClampedArray(raw.data), raw.width, raw.height), 0, 0);
+  const w = Math.round(raw.width * scale);
+  const h = Math.round(raw.height * scale);
+  const small = document.createElement("canvas");
+  small.width = w;
+  small.height = h;
+  const ctx = small.getContext("2d");
+  ctx.drawImage(full, 0, 0, w, h);
   return ctx.getImageData(0, 0, w, h);
 }
 
