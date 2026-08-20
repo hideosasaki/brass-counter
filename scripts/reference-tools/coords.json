@@ -1,11 +1,11 @@
 {
   "stokeOnTrent-warrington": [
-    0.335,
-    0.138
+    0.345,
+    0.098
   ],
   "leek-stokeOnTrent": [
-    0.468,
-    0.095
+    0.457,
+    0.084
   ],
   "belper-leek": [
     0.64,
@@ -20,8 +20,8 @@
     0.222
   ],
   "stokeOnTrent-stone": [
-    0.346,
-    0.231
+    0.378,
+    0.232
   ],
   "stone-uttoxeter": [
     0.43,
@@ -140,8 +140,14 @@
     0.617
   ],
   "birmingham-tamworth": [
-    0.69,
-    0.638
+    [
+      0.69,
+      0.638
+    ],
+    [
+      0.664,
+      0.604
+    ]
   ],
   "birmingham-nuneaton": [
     0.71,
@@ -152,7 +158,7 @@
     0.735
   ],
   "coventry-nuneaton": [
-    0.81,
-    0.69
+    0.855,
+    0.665
   ]
 }

@@ -8,11 +8,14 @@ describe("LINK_POSITIONS", () => {
   });
 
   test("all coordinates are normalized to (0,1)", () => {
-    for (const [x, y] of Object.values(LINK_POSITIONS)) {
-      expect(x).toBeGreaterThan(0);
-      expect(x).toBeLessThan(1);
-      expect(y).toBeGreaterThan(0);
-      expect(y).toBeLessThan(1);
+    for (const pos of Object.values(LINK_POSITIONS)) {
+      const points = Array.isArray(pos[0]) ? pos : [pos];
+      for (const [x, y] of points) {
+        expect(x).toBeGreaterThan(0);
+        expect(x).toBeLessThan(1);
+        expect(y).toBeGreaterThan(0);
+        expect(y).toBeLessThan(1);
+      }
     }
   });
 });

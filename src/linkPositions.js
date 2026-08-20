@@ -1,15 +1,17 @@
 // Link tile positions on the canonical board frame (top-down square,
 // normalized 0-1 coordinates, origin at top-left). Keys match LINKS ids in
-// boardData.js. Calibrated against two real-game photos (canal and rail era)
-// warped into the canonical frame; tile placements in the two eras differ by
-// up to ~0.03, so classification patches should cover a radius of ~0.05.
+// boardData.js. A value is one [x, y] point, or several sample points for
+// links whose physical tile placement varies widely between games.
+// Calibrated against two real-game photos (canal and rail era) warped into
+// the canonical frame; classification patches cover a radius of ~0.03 (60px
+// at 2048) around each point.
 export const LINK_POSITIONS = {
-  "stokeOnTrent-warrington": [0.335, 0.138],
-  "leek-stokeOnTrent": [0.468, 0.095],
+  "stokeOnTrent-warrington": [0.345, 0.098],
+  "leek-stokeOnTrent": [0.457, 0.084],
   "belper-leek": [0.64, 0.1],
   "belper-derby": [0.79, 0.2],
   "derby-nottingham": [0.836, 0.222],
-  "stokeOnTrent-stone": [0.346, 0.231],
+  "stokeOnTrent-stone": [0.378, 0.232],
   "stone-uttoxeter": [0.43, 0.257],
   "derby-uttoxeter": [0.633, 0.247],
   "burtonOnTrent-stone": [0.559, 0.303],
@@ -39,8 +41,8 @@ export const LINK_POSITIONS = {
   "birmingham-worcester": [0.501, 0.76],
   "birmingham-dudley": [0.53, 0.687],
   "birmingham-walsall": [0.555, 0.617],
-  "birmingham-tamworth": [0.69, 0.638],
+  "birmingham-tamworth": [[0.69, 0.638], [0.664, 0.604]],
   "birmingham-nuneaton": [0.71, 0.677],
   "birmingham-coventry": [0.719, 0.735],
-  "coventry-nuneaton": [0.81, 0.69],
+  "coventry-nuneaton": [0.855, 0.665],
 };
