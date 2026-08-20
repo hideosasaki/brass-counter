@@ -76,6 +76,7 @@ function Scan() {
   const [boardUrl, setBoardUrl] = useState(null);
   const [debugReport, setDebugReport] = useState(null);
   const fileInput = useRef(null);
+  const libraryInput = useRef(null);
 
   useEffect(() => {
     ensureEngine().catch(() => {});
@@ -234,6 +235,9 @@ function Scan() {
           <button className="btn btn-primary btn-lg" onClick={() => fileInput.current.click()}>
             Take a photo
           </button>
+          <button className="btn btn-outline-primary" onClick={() => libraryInput.current.click()}>
+            Choose from photos
+          </button>
           <button className="btn btn-outline-secondary" onClick={() => navigate(`/game/${gameId}`)}>
             Back to game
           </button>
@@ -243,6 +247,13 @@ function Scan() {
           type="file"
           accept="image/*"
           capture="environment"
+          hidden
+          onChange={handleFile}
+        />
+        <input
+          ref={libraryInput}
+          type="file"
+          accept="image/*"
           hidden
           onChange={handleFile}
         />
