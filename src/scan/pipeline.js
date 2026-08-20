@@ -11,6 +11,7 @@ import {
   fitGain,
   classifyPatch,
   decideLink,
+  estimateChromaOffset,
 } from "./classifier";
 
 const MAX_PHOTO_DIM = 2000;
@@ -211,11 +212,23 @@ export function classifyAllLinks(warpedData, { era, allowed, side }) {
     }));
   }
   const gain = fitGain(Object.values(pairsById).flat());
-  const out = LINKS.map((link) => {
-    const eraValid = era === "canal" ? link.canal : link.rail;
-    const results = pairsById[link.id].map(({ pc, rc }) =>
+  // First pass without adaptation, only to estimate this scan's color tint
+  // from its confident detections; then decide everything with the tint
+  // corrected. A camera or lighting shift measured on one player's tiles
+  // fixes the borderline ones of the other players.
+  const patchResults = {};
+  const firstPass = LINKS.filter((l) => (era === "canal" ? l.canal : l.rail)).map((link) => {
+    patchResults[link.id] = pairsById[link.id].map(({ pc, rc }) =>
       classifyPatch(pc, rc, gain)
     );
+    return decideLink({ results: patchResults[link.id], allowed, side });
+  });
+  const chromaOffset = estimateChromaOffset(firstPass, side);
+  const out = LINKS.map((link) => {
+    const eraValid = era === "canal" ? link.canal : link.rail;
+    const results =
+      patchResults[link.id] ||
+      pairsById[link.id].map(({ pc, rc }) => classifyPatch(pc, rc, gain));
     if (!eraValid) {
       // This link cannot exist this era. A strong detection here usually
       // means a neighbouring link's tile drifted -> let the human place it.
@@ -232,7 +245,11 @@ export function classifyAllLinks(warpedData, { era, allowed, side }) {
         centroid,
       };
     }
-    return { linkId: link.id, eraValid, ...decideLink({ results, allowed, side }) };
+    return {
+      linkId: link.id,
+      eraValid,
+      ...decideLink({ results, allowed, side, chromaOffset }),
+    };
   });
   const byId = Object.fromEntries(out.map((r) => [r.linkId, r]));
   const globalCentroid = (r) => {

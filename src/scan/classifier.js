@@ -133,8 +133,8 @@ export function classifyPatch(pc, rc, gain) {
   return { frac: cellsInDisc ? masked.length / cellsInDisc : 0, masked, centroid };
 }
 
-function nearestProto(mean, side, allowed) {
-  const [u, v] = chroma(mean);
+function nearestProto(uv, side, allowed) {
+  const [u, v] = uv;
   let best = null, bestD = Infinity, second = Infinity;
   for (const name of allowed) {
     const p = PROTOS[side][name];
@@ -147,7 +147,10 @@ function nearestProto(mean, side, allowed) {
 
 // Three-way decision for one link from its sample-point results.
 // state: "auto" (trusted) or "review" (ask the human). color: class or null.
-export function decideLink({ results, allowed, side }) {
+// chromaOffset: per-scan color adaptation [du, dv], estimated from the
+// scan's confident detections and subtracted from every blob's chroma so a
+// camera or lighting tint measured on one color corrects the others too.
+export function decideLink({ results, allowed, side, chromaOffset = [0, 0] }) {
   const bestIndex = results.reduce((a, b, i) => (results[i].frac > results[a].frac ? i : a), 0);
   const { frac, masked, centroid } = results[bestIndex];
   if (frac < DETECT_MIN_FRAC) {
@@ -156,7 +159,9 @@ export function decideLink({ results, allowed, side }) {
   const mean = masked
     .reduce((a, c) => a.map((v, k) => v + c[k]), [0, 0, 0])
     .map((v) => v / masked.length);
-  const { best, bestD, margin } = nearestProto(mean, side, allowed);
+  const uvRaw = chroma(mean);
+  const uv = [uvRaw[0] - chromaOffset[0], uvRaw[1] - chromaOffset[1]];
+  const { best, bestD, margin } = nearestProto(uv, side, allowed);
   const color = bestD <= PROTO_MAX_DIST ? best : null;
   let state = "auto";
   if (color === null) {
@@ -165,5 +170,27 @@ export function decideLink({ results, allowed, side }) {
   } else if (frac < AUTO_MIN_FRAC || bestD > AUTO_MAX_DIST || margin < AUTO_MIN_MARGIN) {
     state = "review";
   }
-  return { state, color, frac, dist: bestD, margin, bestIndex, centroid };
+  return { state, color, frac, dist: bestD, margin, bestIndex, centroid, uv: uvRaw };
+}
+
+// Estimate the scan-wide chroma tint from confident first-pass detections:
+// the mean deviation of their blobs from their matched prototypes.
+export function estimateChromaOffset(firstPass, side) {
+  const confident = firstPass.filter(
+    (r) => r.color && r.dist < 0.035 && r.frac >= 0.2 && r.uv
+  );
+  if (!confident.length) return [0, 0];
+  let du = 0, dv = 0;
+  for (const r of confident) {
+    const p = PROTOS[side][r.color];
+    du += r.uv[0] - p[0];
+    dv += r.uv[1] - p[1];
+  }
+  du /= confident.length;
+  dv /= confident.length;
+  // Cap the correction so a few odd detections cannot drag everything.
+  const mag = Math.hypot(du, dv);
+  const cap = 0.03;
+  if (mag > cap) { du *= cap / mag; dv *= cap / mag; }
+  return [du, dv];
 }
