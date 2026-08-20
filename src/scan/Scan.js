@@ -21,7 +21,7 @@ const LOCATION_NAMES = {
 const LINKS_BY_ID = Object.fromEntries(LINKS.map((l) => [l.id, l]));
 
 const STAGES = [
-  ["load", "Loading recognition engine (first time: ~10MB)"],
+  ["load", "Loading recognition engine"],
   ["detect", "Finding and matching the board"],
   ["warp", "Correcting and reading the board"],
 ];
@@ -271,13 +271,13 @@ function Scan() {
                 className={`btn ${era === "canal" ? "btn-primary" : "btn-outline-primary"}`}
                 onClick={() => setEra("canal")}
               >
-                Canal
+                🚢Canal
               </button>
               <button
                 className={`btn ${era === "rail" ? "btn-primary" : "btn-outline-primary"}`}
                 onClick={() => setEra("rail")}
               >
-                Rail
+                🚂Rail
               </button>
             </div>
           </div>
@@ -453,7 +453,7 @@ function Scan() {
         </div>
         <div className="d-grid gap-2">
           <button className="btn btn-primary btn-lg" onClick={() => goTo({ phase: "icons" })}>
-            Next: link icons
+            Next
           </button>
           <button className="btn btn-outline-secondary" onClick={() => goTo({ phase: "setup" })}>
             Rescan
