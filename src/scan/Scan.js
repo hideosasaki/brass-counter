@@ -33,8 +33,22 @@ function linkLabel(linkId) {
   return locs.map((l) => LOCATION_NAMES[l]).join(" – ");
 }
 
-function patchUrl(canvas, linkId) {
-  const [nx, ny] = linkSamplePoints(linkId)[0];
+// Where the tile actually sits: the calibrated point, shifted to the
+// detected mask centroid when there is a detection. Normalized coords.
+function detectedPoint(linkId, result) {
+  const pts = linkSamplePoints(linkId);
+  if (result && result.frac >= 0.12 && result.centroid) {
+    const [nx, ny] = pts[result.bestIndex || 0];
+    return [
+      nx + result.centroid[0] / CANONICAL_SIZE,
+      ny + result.centroid[1] / CANONICAL_SIZE,
+    ];
+  }
+  return pts[0];
+}
+
+function patchUrl(canvas, linkId, result) {
+  const [nx, ny] = detectedPoint(linkId, result);
   const S = 260;
   const cx = Math.round(nx * CANONICAL_SIZE) - S / 2;
   const cy = Math.round(ny * CANONICAL_SIZE) - S / 2;
@@ -283,7 +297,7 @@ function Scan() {
     <div className="container mt-3" style={{ maxWidth: 480 }}>
       <h5>{heading}</h5>
       <img
-        src={patchUrl(scan.canvas, linkId)}
+        src={patchUrl(scan.canvas, linkId, linkResultById[linkId])}
         alt={linkLabel(linkId)}
         className="w-100 rounded border mb-2"
         style={{ maxHeight: "40vh", objectFit: "cover" }}
@@ -322,7 +336,7 @@ function Scan() {
         <div className="position-relative mb-3">
           <img src={boardUrl} alt="board" className="w-100 rounded" />
           {LINKS.map((link) => {
-            const [nx, ny] = linkSamplePoints(link.id)[0];
+            const [nx, ny] = detectedPoint(link.id, linkResultById[link.id]);
             const cls = assignments[link.id];
             return (
               <button
