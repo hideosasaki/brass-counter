@@ -364,6 +364,28 @@ function Scan() {
           <button className="btn btn-outline-secondary" onClick={() => setPhase("setup")}>
             Rescan
           </button>
+          <button
+            className="btn btn-link text-secondary btn-sm"
+            onClick={() => {
+              const report = {
+                side: scan.side,
+                inliers: scan.inliers,
+                era,
+                allowed: sessionClasses,
+                links: scan.links.map(({ linkId, state, color, frac, dist, margin }) => ({
+                  linkId, state, color,
+                  frac: Number(frac.toFixed(3)),
+                  dist: dist !== undefined ? Number(dist.toFixed(3)) : undefined,
+                  margin: margin !== undefined && margin < 1 ? Number(margin.toFixed(3)) : undefined,
+                })),
+              };
+              navigator.clipboard
+                .writeText(JSON.stringify(report))
+                .then(() => window.alert("Debug report copied"));
+            }}
+          >
+            Copy debug report
+          </button>
         </div>
       </div>
     );
