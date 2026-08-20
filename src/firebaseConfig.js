@@ -1,5 +1,6 @@
 import { initializeApp } from "firebase/app";
 import { getDatabase } from "firebase/database";
+import { getAnalytics } from "firebase/analytics";
 import { initializeAppCheck, ReCaptchaV3Provider } from "firebase/app-check";
 
 // Web app config and the reCAPTCHA site key are public identifiers,
@@ -16,6 +17,8 @@ const firebaseConfig = {
 };
 
 const app = initializeApp(firebaseConfig);
+
+getAnalytics(app);
 
 initializeAppCheck(app, {
   provider: new ReCaptchaV3Provider("6LfzUiYqAAAAAGb6hgidzGqcNsJCZY0xNvVPy59S"),
