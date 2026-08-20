@@ -65,7 +65,7 @@ function LinkName({ linkId }) {
     <span>
       {locs.map((l, i) => (
         <React.Fragment key={l}>
-          {i > 0 && <span className="mx-1">–</span>}
+          {i > 0 && <span className="me-1">–</span>}
           <LocationName id={l} />
         </React.Fragment>
       ))}
