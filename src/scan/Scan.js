@@ -147,19 +147,27 @@ function Scan() {
       0
     );
 
+  // One row of color buttons plus Empty: everything must fit on a phone
+  // screen together with the patch image, without scrolling.
   const colorButtons = (linkId) => (
     <div className="d-grid gap-2">
-      {sessionClasses.map((cls) => (
-        <button
-          key={cls}
-          className="btn btn-lg text-white fw-bold"
-          style={{ backgroundColor: CLASS_HEX[cls] }}
-          onClick={() => assign(linkId, cls)}
-        >
-          {playerLabel(cls)}
-        </button>
-      ))}
-      <button className="btn btn-lg btn-outline-secondary" onClick={() => assign(linkId, null)}>
+      <div className="d-flex gap-2">
+        {sessionClasses.map((cls) => (
+          <button
+            key={cls}
+            className="btn btn-lg text-white fw-bold flex-fill"
+            style={{ backgroundColor: CLASS_HEX[cls], minHeight: 52 }}
+            onClick={() => assign(linkId, cls)}
+          >
+            {playerLabel(cls)}
+          </button>
+        ))}
+      </div>
+      <button
+        className="btn btn-lg btn-outline-secondary"
+        style={{ minHeight: 48 }}
+        onClick={() => assign(linkId, null)}
+      >
         Empty
       </button>
     </div>
@@ -263,6 +271,7 @@ function Scan() {
         src={patchUrl(scan.canvas, linkId)}
         alt={linkLabel(linkId)}
         className="w-100 rounded border mb-2"
+        style={{ maxHeight: "40vh", objectFit: "cover" }}
       />
       <div className="fw-bold">{linkLabel(linkId)}</div>
       {eraValidById[linkId] === false ? (
