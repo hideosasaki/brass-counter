@@ -228,6 +228,12 @@ function Game() {
           <button className="btn btn-primary" onClick={endRound}>
             End Round
           </button>
+          <button
+            className="btn btn-outline-primary"
+            onClick={() => navigate(`/game/${gameId}/scan`)}
+          >
+            Link scoring (β)
+          </button>
         </div>
       </div>
       <button className="btn" onClick={resetGame}>

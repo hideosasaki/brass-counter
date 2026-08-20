@@ -171,3 +171,23 @@ describe("scoreFlippedTiles", () => {
     expect(INDUSTRY_STATS.brewery[4].vp).toBe(10);
   });
 });
+
+describe("scoreLinksFromIcons", () => {
+  const { scoreLinksFromIcons } = require("./scoring");
+
+  test("uses manual icon counts for cities and fixed 2 for merchants", () => {
+    const links = [
+      { linkId: "coalbrookdale-shrewsbury", player: "red" },
+      { linkId: "walsall-wolverhampton", player: "pink" },
+    ];
+    const icons = { coalbrookdale: 3, wolverhampton: 2, walsall: 1 };
+    // shrewsbury merchant 2 + coalbrookdale 3 = 5; wolverhampton 2 + walsall 1 = 3
+    expect(scoreLinksFromIcons(links, icons)).toEqual({ red: 5, pink: 3 });
+  });
+
+  test("missing locations count 0; the farm brewery link counts 3 locations", () => {
+    const links = [{ linkId: "kidderminster-worcester", player: "yellow" }];
+    const icons = { kidderminster: 1, farmSouth: 2 };
+    expect(scoreLinksFromIcons(links, icons)).toEqual({ yellow: 3 });
+  });
+});

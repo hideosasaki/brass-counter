@@ -18,7 +18,10 @@
     "start": "react-scripts start",
     "build": "react-scripts build",
     "test": "react-scripts test",
-    "eject": "react-scripts eject"
+    "eject": "react-scripts eject",
+    "copy-opencv": "cp node_modules/@techstark/opencv-js/dist/opencv.js public/scan/opencv.js",
+    "prestart": "npm run copy-opencv",
+    "prebuild": "npm run copy-opencv"
   },
   "eslintConfig": {
     "extends": [
@@ -37,5 +40,8 @@
       "last 1 firefox version",
       "last 1 safari version"
     ]
+  },
+  "devDependencies": {
+    "@techstark/opencv-js": "^5.0.0-release.1"
   }
 }

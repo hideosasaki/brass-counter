@@ -39,6 +39,23 @@ export function scoreLinks(links, tiles) {
   return scores;
 }
 
+// Link scoring from manually entered icon counts per location (the scanner's
+// v1 flow: link ownership comes from the photo, icon counts from the user).
+// Merchants always count their printed 2 icons; unlisted locations count 0.
+export function scoreLinksFromIcons(links, icons) {
+  const scores = {};
+  for (const { linkId, player } of links) {
+    const link = LINKS_BY_ID[linkId];
+    const vp = link.locations.reduce(
+      (sum, loc) =>
+        sum + (MERCHANTS[loc] ? MERCHANTS[loc].linkIcons : icons[loc] || 0),
+      0
+    );
+    scores[player] = (scores[player] || 0) + vp;
+  }
+  return scores;
+}
+
 // Sum VP of flipped tiles per player. An explicit vp (e.g. read from a
 // photo of the tile) takes precedence over the lookup table.
 export function scoreFlippedTiles(tiles) {

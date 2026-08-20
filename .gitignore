@@ -30,3 +30,6 @@ yarn-error.log*
 
 # derived debug images (contain board artwork crops)
 scripts/reference-tools/*.jpg
+
+# copied from node_modules at build time
+/public/scan/opencv.js
