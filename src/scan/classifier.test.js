@@ -89,13 +89,23 @@ describe("decideLink", () => {
     expect(r.color).toBe("yellow");
   });
 
-  test("a weak detection goes to review", () => {
+  test("a borderline detection goes to review", () => {
+    const r = decideLink({
+      results: [{ frac: 0.13, masked: yellowMasked }],
+      allowed: ["pink", "yellow"],
+      side: "day",
+    });
+    expect(r.state).toBe("review");
+  });
+
+  test("a very weak detection is dropped as noise, not asked about", () => {
     const r = decideLink({
       results: [{ frac: 0.08, masked: yellowMasked }],
       allowed: ["pink", "yellow"],
       side: "day",
     });
-    expect(r.state).toBe("review");
+    expect(r.state).toBe("auto");
+    expect(r.color).toBe(null);
   });
 
   test("no detection is an auto empty", () => {

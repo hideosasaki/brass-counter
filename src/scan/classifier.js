@@ -30,8 +30,9 @@ const PROTO_MAX_DIST = 0.05;
 const AUTO_MIN_FRAC = 0.15;
 const AUTO_MAX_DIST = 0.04;
 const AUTO_MIN_MARGIN = 0.02;
-const DETECT_MIN_FRAC = 0.06;
-const EMPTY_REVIEW_FRAC = 0.05;
+// Real tiles measured frac >= 0.17 in ground truth; sub-0.12 detections are
+// noise (glare, print differences) and are dropped without asking.
+const DETECT_MIN_FRAC = 0.12;
 const UNMATCHED_EMPTY_MAX_FRAC = 0.3;
 
 export function linkSamplePoints(linkId) {
@@ -139,7 +140,7 @@ function nearestProto(mean, side, allowed) {
 export function decideLink({ results, allowed, side }) {
   const { frac, masked } = results.reduce((a, b) => (b.frac > a.frac ? b : a));
   if (frac < DETECT_MIN_FRAC) {
-    return { state: frac >= EMPTY_REVIEW_FRAC ? "review" : "auto", color: null, frac };
+    return { state: "auto", color: null, frac };
   }
   const mean = masked
     .reduce((a, c) => a.map((v, k) => v + c[k]), [0, 0, 0])

@@ -252,6 +252,10 @@ function Scan() {
   }
 
   // ---- review queue / single edit ------------------------------------------
+  const eraValidById = Object.fromEntries(
+    (scan ? scan.links : []).map((l) => [l.linkId, l.eraValid])
+  );
+
   const cardFor = (linkId, heading) => (
     <div className="container mt-3" style={{ maxWidth: 480 }}>
       <h5>{heading}</h5>
@@ -261,7 +265,15 @@ function Scan() {
         className="w-100 rounded border mb-2"
       />
       <div className="fw-bold">{linkLabel(linkId)}</div>
-      <div className="text-secondary mb-2">Whose link is this?</div>
+      {eraValidById[linkId] === false ? (
+        <div className="alert alert-warning py-2 my-2">
+          This link cannot be built in the {era} era. If a tile is shown here,
+          it probably belongs to a neighbouring link — choose Empty and assign
+          it on the map. Only pick a color if it was really built here.
+        </div>
+      ) : (
+        <div className="text-secondary mb-2">Whose link is this?</div>
+      )}
       {colorButtons(linkId)}
     </div>
   );
