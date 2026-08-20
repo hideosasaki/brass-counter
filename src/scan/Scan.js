@@ -385,10 +385,21 @@ function Scan() {
                 navigator.clipboard
                   .writeText(text)
                   .then(() => window.alert("Debug report copied"));
-              } else {
-                // http:// dev server has no clipboard API; show the text
-                setDebugReport(text);
+                return;
               }
+              // http:// dev server has no clipboard API; use the legacy one
+              const ta = document.createElement("textarea");
+              ta.value = text;
+              ta.readOnly = true;
+              ta.style.position = "fixed";
+              ta.style.opacity = "0";
+              document.body.appendChild(ta);
+              ta.focus();
+              ta.setSelectionRange(0, text.length);
+              const copied = document.execCommand("copy");
+              document.body.removeChild(ta);
+              if (copied) window.alert("Debug report copied");
+              else setDebugReport(text); // last resort: show it
             }}
           >
             Copy debug report
