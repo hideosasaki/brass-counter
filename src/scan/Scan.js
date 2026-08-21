@@ -2,23 +2,23 @@ import React, { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { ref, get } from "firebase/database";
 import { database } from "../firebaseConfig";
-import { CITIES, MERCHANTS, FARM_BREWERIES, LINKS, REGION_COLORS } from "../boardData";
-import { scoreLinksFromIcons } from "../scoring";
-import { APP_COLOR_CLASS, linkSamplePoints, CANONICAL_SIZE } from "./classifier";
+import {
+  MERCHANTS,
+  FARM_BREWERIES,
+  LINKS,
+  LINKS_BY_ID,
+  LOCATIONS,
+  REGION_COLORS,
+} from "../boardData";
+import { scoreLinksFromIcons, linkVpFromIcons } from "../scoring";
+import { PLAYER_TOKEN_CLASSES } from "../playerDefaults";
+import { detectedPoint, CANONICAL_SIZE, DETECT_MIN_FRAC } from "./classifier";
 import { ensureEngine, scanPhoto, ScanError, CLOSE_PAIRS } from "./pipeline";
 import "bootstrap/dist/css/bootstrap.min.css";
 
 const CLASS_HEX = Object.fromEntries(
-  Object.entries(APP_COLOR_CLASS).map(([hex, cls]) => [cls, hex])
+  Object.entries(PLAYER_TOKEN_CLASSES).map(([hex, cls]) => [cls, hex])
 );
-
-const LOCATION_NAMES = {
-  ...Object.fromEntries(Object.entries(CITIES).map(([id, c]) => [id, c.name])),
-  ...Object.fromEntries(Object.entries(MERCHANTS).map(([id, m]) => [id, m.name])),
-  ...Object.fromEntries(Object.entries(FARM_BREWERIES).map(([id, f]) => [id, f.name])),
-};
-
-const LINKS_BY_ID = Object.fromEntries(LINKS.map((l) => [l.id, l]));
 
 const STAGES = [
   ["load", "Loading recognition engine"],
@@ -31,30 +31,25 @@ const STAGE_ALIAS = { side: "detect", classify: "warp" };
 
 function linkLabel(linkId) {
   const locs = LINKS_BY_ID[linkId].locations.filter((l) => !FARM_BREWERIES[l]);
-  return locs.map((l) => LOCATION_NAMES[l]).join(" – ");
+  return locs.map((l) => LOCATIONS[l].name).join(" – ");
 }
 
 // City names as they appear on the board: uppercase on their region-colored
 // name banner, so they are easy to find on the physical board.
 function LocationName({ id }) {
-  const region = CITIES[id]
-    ? CITIES[id].region
-    : MERCHANTS[id]
-    ? "merchant"
-    : "farm";
-  const bg = REGION_COLORS[region];
+  const { bg, fg } = REGION_COLORS[LOCATIONS[id].region];
   return (
     <span
       className="d-inline-block rounded px-2 me-1 mb-1"
       style={{
         backgroundColor: bg,
-        color: region === "merchant" ? "#26221c" : "#fff",
+        color: fg,
         textTransform: "uppercase",
         fontSize: "0.85em",
         letterSpacing: "0.03em",
       }}
     >
-      {LOCATION_NAMES[id]}
+      {LOCATIONS[id].name}
     </span>
   );
 }
@@ -71,20 +66,6 @@ function LinkName({ linkId }) {
       ))}
     </span>
   );
-}
-
-// Where the tile actually sits: the calibrated point, shifted to the
-// detected mask centroid when there is a detection. Normalized coords.
-function detectedPoint(linkId, result) {
-  const pts = linkSamplePoints(linkId);
-  if (result && result.frac >= 0.12 && result.centroid) {
-    const [nx, ny] = pts[result.bestIndex || 0];
-    return [
-      nx + result.centroid[0] / CANONICAL_SIZE,
-      ny + result.centroid[1] / CANONICAL_SIZE,
-    ];
-  }
-  return pts[0];
 }
 
 function patchUrl(canvas, linkId, result) {
@@ -109,11 +90,9 @@ function Scan() {
   const [error, setError] = useState(null);
   const [scan, setScan] = useState(null); // {canvas, side, links}
   const [assignments, setAssignments] = useState({}); // linkId -> class|null
-  const [reviewIds, setReviewIds] = useState([]);
   const [reviewIndex, setReviewIndex] = useState(0);
   const [editingLink, setEditingLink] = useState(null); // from map view
   const [icons, setIcons] = useState({});
-  const [boardUrl, setBoardUrl] = useState(null);
   const [debugReport, setDebugReport] = useState(null);
   const fileInput = useRef(null);
   const libraryInput = useRef(null);
@@ -148,14 +127,40 @@ function Scan() {
   }, []);
 
   const sessionClasses = useMemo(
-    () => (players || []).map((p) => APP_COLOR_CLASS[p.color]).filter(Boolean),
+    () => (players || []).map((p) => PLAYER_TOKEN_CLASSES[p.color]).filter(Boolean),
     [players]
   );
 
   const playerLabel = (cls) => {
-    const i = (players || []).findIndex((p) => APP_COLOR_CLASS[p.color] === cls);
+    const i = (players || []).findIndex((p) => PLAYER_TOKEN_CLASSES[p.color] === cls);
     return i >= 0 ? `#${i + 1}` : cls;
   };
+
+  const linkResultById = useMemo(
+    () => Object.fromEntries((scan ? scan.links : []).map((l) => [l.linkId, l])),
+    [scan]
+  );
+  const reviewIds = useMemo(
+    () =>
+      scan
+        ? scan.links.filter((l) => l.state === "review").map((l) => l.linkId)
+        : [],
+    [scan]
+  );
+  const boardUrl = useMemo(
+    () => scan && scan.canvas.toDataURL("image/jpeg", 0.7),
+    [scan]
+  );
+  // The review/edit card currently on screen; its patch image is cut out and
+  // JPEG-encoded once per link, not on every re-render.
+  const cardLinkId = phase === "review" ? reviewIds[reviewIndex] : editingLink;
+  const cardPatchUrl = useMemo(
+    () =>
+      scan && cardLinkId
+        ? patchUrl(scan.canvas, cardLinkId, linkResultById[cardLinkId])
+        : null,
+    [scan, cardLinkId, linkResultById]
+  );
 
   const handleFile = async (e) => {
     const file = e.target.files && e.target.files[0];
@@ -173,10 +178,8 @@ function Scan() {
       for (const l of result.links) initial[l.linkId] = l.color;
       setScan(result);
       setAssignments(initial);
-      setBoardUrl(result.canvas.toDataURL("image/jpeg", 0.7));
-      const queue = result.links.filter((l) => l.state === "review").map((l) => l.linkId);
-      setReviewIds(queue);
-      goTo(queue.length ? { phase: "review", reviewIndex: 0 } : { phase: "map" });
+      const needsReview = result.links.some((l) => l.state === "review");
+      goTo(needsReview ? { phase: "review", reviewIndex: 0 } : { phase: "map" });
     } catch (err) {
       setError(err instanceof ScanError ? err.code : "failed");
       setPhase("error");
@@ -185,9 +188,7 @@ function Scan() {
 
   const assign = (linkId, cls) => {
     setAssignments((a) => ({ ...a, [linkId]: cls }));
-    if (editingLink) {
-      goTo({ phase: "map" });
-    } else if (reviewIndex + 1 < reviewIds.length) {
+    if (!editingLink && reviewIndex + 1 < reviewIds.length) {
       goTo({ phase: "review", reviewIndex: reviewIndex + 1 });
     } else {
       goTo({ phase: "map" });
@@ -216,12 +217,6 @@ function Scan() {
     () => scoreLinksFromIcons(ownedLinks, icons),
     [ownedLinks, icons]
   );
-
-  const linkVp = (linkId) =>
-    LINKS_BY_ID[linkId].locations.reduce(
-      (s, loc) => s + (MERCHANTS[loc] ? MERCHANTS[loc].linkIcons : icons[loc] || 0),
-      0
-    );
 
   // One row of color buttons plus Empty: everything must fit on a phone
   // screen together with the patch image, without scrolling.
@@ -346,23 +341,16 @@ function Scan() {
   }
 
   // ---- review queue / single edit ------------------------------------------
-  const linkResultById = Object.fromEntries(
-    (scan ? scan.links : []).map((l) => [l.linkId, l])
-  );
-  const eraValidById = Object.fromEntries(
-    (scan ? scan.links : []).map((l) => [l.linkId, l.eraValid])
-  );
-
   // If this link and a close neighbour both detected something, the tile in
   // the preview may actually belong to the neighbour.
   const crosstalkNeighbor = (linkId) => {
     const r = linkResultById[linkId];
-    if (!r || r.frac < 0.12) return null;
+    if (!r || r.frac < DETECT_MIN_FRAC) return null;
     for (const [a, b] of CLOSE_PAIRS) {
       if (a === linkId || b === linkId) {
         const other = a === linkId ? b : a;
         const ro = linkResultById[other];
-        if (ro && ro.frac >= 0.12) return other;
+        if (ro && ro.frac >= DETECT_MIN_FRAC) return other;
       }
     }
     return null;
@@ -380,43 +368,45 @@ function Scan() {
     return parts.join(" · ");
   };
 
-  const cardFor = (linkId, heading) => (
-    <div className="container mt-3" style={{ maxWidth: 480 }}>
-      <h5>{heading}</h5>
-      <img
-        src={patchUrl(scan.canvas, linkId, linkResultById[linkId])}
-        alt={linkLabel(linkId)}
-        className="w-100 rounded border mb-2"
-        style={{ maxHeight: "40vh", objectFit: "cover" }}
-      />
-      <div className="fw-bold fs-5"><LinkName linkId={linkId} /></div>
-      {eraValidById[linkId] === false ? (
-        <div className="alert alert-warning py-2 my-2">
-          This link cannot be built in the {era} era. If a tile is shown here,
-          it probably belongs to a neighbouring link — choose Empty and assign
-          it on the map. Only pick a color if it was really built here.
-        </div>
-      ) : crosstalkNeighbor(linkId) ? (
-        <div className="alert alert-warning py-2 my-2">
-          The tile shown may belong to the adjacent{" "}
-          <LinkName linkId={crosstalkNeighbor(linkId)} /> link. Pick a color
-          only if it sits on <LinkName linkId={linkId} />; otherwise choose
-          Empty.
-        </div>
-      ) : (
-        <div className="text-secondary mb-2">Whose link is this?</div>
-      )}
-      {colorButtons(linkId)}
-      <div className="text-secondary small mt-2">{debugLine(linkId)}</div>
-    </div>
-  );
+  const cardFor = (linkId, heading) => {
+    const neighbor = crosstalkNeighbor(linkId);
+    return (
+      <div className="container mt-3" style={{ maxWidth: 480 }}>
+        <h5>{heading}</h5>
+        <img
+          src={cardPatchUrl}
+          alt={linkLabel(linkId)}
+          className="w-100 rounded border mb-2"
+          style={{ maxHeight: "40vh", objectFit: "cover" }}
+        />
+        <div className="fw-bold fs-5"><LinkName linkId={linkId} /></div>
+        {linkResultById[linkId]?.eraValid === false ? (
+          <div className="alert alert-warning py-2 my-2">
+            This link cannot be built in the {era} era. If a tile is shown here,
+            it probably belongs to a neighbouring link — choose Empty and assign
+            it on the map. Only pick a color if it was really built here.
+          </div>
+        ) : neighbor ? (
+          <div className="alert alert-warning py-2 my-2">
+            The tile shown may belong to the adjacent{" "}
+            <LinkName linkId={neighbor} /> link. Pick a color
+            only if it sits on <LinkName linkId={linkId} />; otherwise choose
+            Empty.
+          </div>
+        ) : (
+          <div className="text-secondary mb-2">Whose link is this?</div>
+        )}
+        {colorButtons(linkId)}
+        <div className="text-secondary small mt-2">{debugLine(linkId)}</div>
+      </div>
+    );
+  };
 
   if (phase === "review") {
-    const linkId = reviewIds[reviewIndex];
-    return cardFor(linkId, `Check ${reviewIndex + 1} / ${reviewIds.length}`);
+    return cardFor(cardLinkId, `Check ${reviewIndex + 1} / ${reviewIds.length}`);
   }
   if (editingLink) {
-    return cardFor(editingLink, "Edit link");
+    return cardFor(cardLinkId, "Edit link");
   }
 
   // ---- map overview ---------------------------------------------------------
@@ -591,7 +581,7 @@ function Scan() {
                 />
                 <LinkName linkId={linkId} />
               </span>
-              <span className="fw-bold">{linkVp(linkId)}</span>
+              <span className="fw-bold">{linkVpFromIcons(linkId, icons)}</span>
             </li>
           ))}
         </ul>

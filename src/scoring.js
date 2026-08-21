@@ -6,9 +6,7 @@
 // locations always show 2 icons.
 // Tile scoring: only flipped industry tiles score their printed VP.
 
-import { INDUSTRY_STATS, MERCHANTS, LINKS } from "./boardData";
-
-const LINKS_BY_ID = Object.fromEntries(LINKS.map((l) => [l.id, l]));
+import { INDUSTRY_STATS, MERCHANTS, LINKS_BY_ID } from "./boardData";
 
 export function linkIconsOfTile(industry, level) {
   return INDUSTRY_STATS[industry][level].linkVP;
@@ -39,19 +37,23 @@ export function scoreLinks(links, tiles) {
   return scores;
 }
 
-// Link scoring from manually entered icon counts per location (the scanner's
-// v1 flow: link ownership comes from the photo, icon counts from the user).
-// Merchants always count their printed 2 icons; unlisted locations count 0.
+// One link's VP from manually entered icon counts per location (the
+// scanner's v1 flow: link ownership comes from the photo, icon counts from
+// the user). Merchants always count their printed 2 icons; unlisted
+// locations count 0.
+export function linkVpFromIcons(linkId, icons) {
+  return LINKS_BY_ID[linkId].locations.reduce(
+    (sum, loc) =>
+      sum + (MERCHANTS[loc] ? MERCHANTS[loc].linkIcons : icons[loc] || 0),
+    0
+  );
+}
+
+// Returns { [player]: total VP }.
 export function scoreLinksFromIcons(links, icons) {
   const scores = {};
   for (const { linkId, player } of links) {
-    const link = LINKS_BY_ID[linkId];
-    const vp = link.locations.reduce(
-      (sum, loc) =>
-        sum + (MERCHANTS[loc] ? MERCHANTS[loc].linkIcons : icons[loc] || 0),
-      0
-    );
-    scores[player] = (scores[player] || 0) + vp;
+    scores[player] = (scores[player] || 0) + linkVpFromIcons(linkId, icons);
   }
   return scores;
 }

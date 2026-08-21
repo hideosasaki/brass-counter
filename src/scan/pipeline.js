@@ -12,7 +12,10 @@ import {
   fitGain,
   classifyPatch,
   decideLink,
+  detectedPoint,
   estimateChromaOffset,
+  strongestIndex,
+  DETECT_MIN_FRAC,
   PATCH_HALF,
   ALIGN_MARGIN,
 } from "./classifier";
@@ -33,7 +36,14 @@ export function ensureEngine() {
       loadRef("day"),
       loadRef("night"),
       loadRefPatches(),
-    ]).then(([cv, day, night]) => ({ cv, refs: { day, night } }));
+    ]).then(([cv, day, night]) => {
+      // The reference descriptors are immutable; build their WASM Mats once
+      // here instead of copying 640KB into a fresh Mat on every scan.
+      for (const ref of [day, night]) {
+        ref.descMat = cv.matFromArray(ref.n, 32, cv.CV_8U, ref.desc);
+      }
+      return { cv, refs: { day, night } };
+    });
     enginePromise.catch(() => {
       enginePromise = null; // allow retry after a network failure
     });
@@ -139,10 +149,9 @@ export async function scanPhoto(file, { era, allowed, onStage }) {
 
   onStage("detect");
   await tick();
-  const src = cv.matFromImageData(imageData);
+  const src = cv.matFromImageData(imageData); // kept alive for the warp below
   const gray = new cv.Mat();
   cv.cvtColor(src, gray, cv.COLOR_RGBA2GRAY);
-  src.delete();
   const orb = new cv.ORB(ORB_FEATURES, 1.2, 12, 31, 0, 2, cv.ORB_HARRIS_SCORE, 31, 12);
   const kp = new cv.KeyPointVector();
   const desc = new cv.Mat();
@@ -156,9 +165,8 @@ export async function scanPhoto(file, { era, allowed, onStage }) {
   let best = null;
   for (const side of ["day", "night"]) {
     const ref = refs[side];
-    const refDesc = cv.matFromArray(ref.n, 32, cv.CV_8U, Array.from(ref.desc));
     const knn = new cv.DMatchVectorVector();
-    bf.knnMatch(desc, refDesc, knn, 2);
+    bf.knnMatch(desc, ref.descMat, knn, 2);
     const good = [];
     for (let i = 0; i < knn.size(); i++) {
       const pair = knn.get(i);
@@ -167,7 +175,6 @@ export async function scanPhoto(file, { era, allowed, onStage }) {
       }
     }
     knn.delete();
-    refDesc.delete();
     if (good.length >= 8) {
       const srcPts = cv.matFromArray(good.length, 1, cv.CV_32FC2,
         good.flatMap((m) => { const p = kp.get(m.queryIdx).pt; return [p.x, p.y]; }));
@@ -190,16 +197,16 @@ export async function scanPhoto(file, { era, allowed, onStage }) {
   kp.delete(); desc.delete(); bf.delete();
   if (!best || best.inliers < MIN_INLIERS) {
     if (best) best.H.delete();
+    src.delete();
     throw new ScanError("board_not_found");
   }
 
   onStage("warp");
   await tick();
-  const photoMat = cv.matFromImageData(imageData);
   const warped = new cv.Mat();
-  cv.warpPerspective(photoMat, warped, best.H,
+  cv.warpPerspective(src, warped, best.H,
     new cv.Size(CANONICAL_SIZE, CANONICAL_SIZE));
-  photoMat.delete(); best.H.delete();
+  src.delete(); best.H.delete();
   const canvas = document.createElement("canvas");
   canvas.width = CANONICAL_SIZE;
   canvas.height = CANONICAL_SIZE;
@@ -253,33 +260,32 @@ export function classifyAllLinks(warpedData, { era, allowed, side }) {
     });
   }
   const gain = fitGain(Object.values(pairsById).flat());
+  const patchResults = {};
+  for (const link of LINKS) {
+    patchResults[link.id] = pairsById[link.id].map(({ pc, rc }) =>
+      classifyPatch(pc, rc, gain)
+    );
+  }
   // First pass without adaptation, only to estimate this scan's color tint
   // from its confident detections; then decide everything with the tint
   // corrected. A camera or lighting shift measured on one player's tiles
   // fixes the borderline ones of the other players.
-  const patchResults = {};
-  const firstPass = LINKS.filter((l) => (era === "canal" ? l.canal : l.rail)).map((link) => {
-    patchResults[link.id] = pairsById[link.id].map(({ pc, rc }) =>
-      classifyPatch(pc, rc, gain)
-    );
-    return decideLink({ results: patchResults[link.id], allowed, side });
-  });
+  const firstPass = LINKS.filter((l) => (era === "canal" ? l.canal : l.rail)).map(
+    (link) => decideLink({ results: patchResults[link.id], allowed, side })
+  );
   const chromaOffset = estimateChromaOffset(firstPass, side);
   const out = LINKS.map((link) => {
     const eraValid = era === "canal" ? link.canal : link.rail;
-    const results =
-      patchResults[link.id] ||
-      pairsById[link.id].map(({ pc, rc }) => classifyPatch(pc, rc, gain));
+    const results = patchResults[link.id];
     if (!eraValid) {
       // This link cannot exist this era. A strong detection here usually
       // means a neighbouring link's tile drifted -> let the human place it.
-      const bestIndex = results.reduce(
-        (a, _, i) => (results[i].frac > results[a].frac ? i : a), 0);
+      const bestIndex = strongestIndex(results);
       const { frac, centroid } = results[bestIndex];
       return {
         linkId: link.id,
         eraValid,
-        state: frac >= 0.12 ? "review" : "auto",
+        state: frac >= DETECT_MIN_FRAC ? "review" : "auto",
         color: null,
         frac,
         bestIndex,
@@ -293,16 +299,11 @@ export function classifyAllLinks(warpedData, { era, allowed, side }) {
     };
   });
   const byId = Object.fromEntries(out.map((r) => [r.linkId, r]));
-  const globalCentroid = (r) => {
-    const [nx, ny] = linkSamplePoints(r.linkId)[r.bestIndex || 0];
-    return [
-      nx * CANONICAL_SIZE + (r.centroid ? r.centroid[0] : 0),
-      ny * CANONICAL_SIZE + (r.centroid ? r.centroid[1] : 0),
-    ];
-  };
+  const globalCentroid = (r) =>
+    detectedPoint(r.linkId, r).map((v) => v * CANONICAL_SIZE);
   for (const [a, b] of CLOSE_PAIRS) {
     const ra = byId[a], rb = byId[b];
-    if (ra.frac >= 0.12 && rb.frac >= 0.12) {
+    if (ra.frac >= DETECT_MIN_FRAC && rb.frac >= DETECT_MIN_FRAC) {
       // Both patches fire. If their mask centroids point at the same spot on
       // the board, it is one tile seen from two patches; a machine cannot
       // decide which link owns it, so both go to review. Two clearly

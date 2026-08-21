@@ -74,31 +74,35 @@ export const CITIES = {
   redditch: { name: "Redditch", region: "birmingham" },
 };
 
-// Board banner colors per region (approximated from the printed board).
+// Board banner colors per region (approximated from the printed board),
+// with a readable text color for each banner.
 export const REGION_COLORS = {
-  derbyshire: "#537c80",
-  staffordshire: "#1e5aa0",
-  midlands: "#8c4e51",
-  blackCountry: "#986627",
-  birmingham: "#564a5e",
-  merchant: "#ded8ca",
-  farm: "#6a705f",
+  derbyshire: { bg: "#537c80", fg: "#fff" },
+  staffordshire: { bg: "#1e5aa0", fg: "#fff" },
+  midlands: { bg: "#8c4e51", fg: "#fff" },
+  blackCountry: { bg: "#986627", fg: "#fff" },
+  birmingham: { bg: "#564a5e", fg: "#fff" },
+  merchant: { bg: "#ded8ca", fg: "#26221c" },
+  farm: { bg: "#6a705f", fg: "#fff" },
 };
 
 // Merchant locations. Each has 2 link icons printed on the board,
 // regardless of its number of merchant tile slots.
 export const MERCHANTS = {
-  shrewsbury: { name: "Shrewsbury", linkIcons: 2 },
-  gloucester: { name: "Gloucester", linkIcons: 2 },
-  oxford: { name: "Oxford", linkIcons: 2 },
-  warrington: { name: "Warrington", linkIcons: 2 },
-  nottingham: { name: "Nottingham", linkIcons: 2 },
+  shrewsbury: { name: "Shrewsbury", region: "merchant", linkIcons: 2 },
+  gloucester: { name: "Gloucester", region: "merchant", linkIcons: 2 },
+  oxford: { name: "Oxford", region: "merchant", linkIcons: 2 },
+  warrington: { name: "Warrington", region: "merchant", linkIcons: 2 },
+  nottingham: { name: "Nottingham", region: "merchant", linkIcons: 2 },
 };
 
 export const FARM_BREWERIES = {
-  farmNorth: { name: "Farm Brewery (Cannock)" },
-  farmSouth: { name: "Farm Brewery (Kidderminster/Worcester)" },
+  farmNorth: { name: "Farm Brewery (Cannock)", region: "farm" },
+  farmSouth: { name: "Farm Brewery (Kidderminster/Worcester)", region: "farm" },
 };
+
+// Every location on the board, whatever its kind.
+export const LOCATIONS = { ...CITIES, ...MERCHANTS, ...FARM_BREWERIES };
 
 // Link definitions. Kidderminster-Worcester lists three locations because
 // that single link tile is also adjacent to the southern farm brewery
@@ -144,3 +148,5 @@ export const LINKS = [
   { id: "tamworth-walsall", locations: ["tamworth", "walsall"], canal: false, rail: true },
   { id: "walsall-wolverhampton", locations: ["walsall", "wolverhampton"], canal: true, rail: true },
 ];
+
+export const LINKS_BY_ID = Object.fromEntries(LINKS.map((l) => [l.id, l]));

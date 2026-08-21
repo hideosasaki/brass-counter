@@ -17,14 +17,6 @@ export const PROTOS = {
   night: { pink: [0.355, 0.275], red: [0.42, 0.29], yellow: [0.4, 0.355], white: [0.318, 0.325] },
 };
 
-// Physical token color class for each app player color.
-export const APP_COLOR_CLASS = {
-  "#7c69dc": "pink",
-  "#dbc118": "yellow",
-  "#c7bcb5": "white",
-  "#ad3d1e": "red",
-};
-
 const MASK_SCORE_THRESHOLD = 28;
 const PROTO_MAX_DIST = 0.05;
 // Colored detections need this much mass to auto-assign. Banner-and-fold
@@ -34,13 +26,31 @@ const AUTO_MAX_DIST = 0.04;
 const AUTO_MIN_MARGIN = 0.02;
 // Real tiles measured frac >= 0.17 in ground truth; sub-0.12 detections are
 // noise (glare, print differences) and are dropped without asking.
-const DETECT_MIN_FRAC = 0.12;
+export const DETECT_MIN_FRAC = 0.12;
 const UNMATCHED_EMPTY_MAX_FRAC = 0.3;
 const UNMATCHED_REVIEW_MAX_DIST = 0.09;
 
 export function linkSamplePoints(linkId) {
   const pos = LINK_POSITIONS[linkId];
   return Array.isArray(pos[0]) ? pos : [pos];
+}
+
+// Index of the sample point with the strongest detection.
+export const strongestIndex = (results) =>
+  results.reduce((a, _, i) => (results[i].frac > results[a].frac ? i : a), 0);
+
+// Where the tile actually sits: the calibrated sample point, shifted to the
+// detected mask centroid when there is a detection. Normalized coords.
+export function detectedPoint(linkId, result) {
+  const pts = linkSamplePoints(linkId);
+  if (result && result.frac >= DETECT_MIN_FRAC && result.centroid) {
+    const [nx, ny] = pts[result.bestIndex || 0];
+    return [
+      nx + result.centroid[0] / CANONICAL_SIZE,
+      ny + result.centroid[1] / CANONICAL_SIZE,
+    ];
+  }
+  return pts[0];
 }
 
 // Parse public/scan/ref_*.bin: [uint32 n][n*2 float32 x,y][n*32 uint8 desc]
@@ -195,7 +205,7 @@ function nearestProto(uv, side, allowed) {
 // scan's confident detections and subtracted from every blob's chroma so a
 // camera or lighting tint measured on one color corrects the others too.
 export function decideLink({ results, allowed, side, chromaOffset = [0, 0] }) {
-  const bestIndex = results.reduce((a, b, i) => (results[i].frac > results[a].frac ? i : a), 0);
+  const bestIndex = strongestIndex(results);
   const { frac, masked, centroid } = results[bestIndex];
   if (frac < DETECT_MIN_FRAC) {
     return { state: "auto", color: null, frac, bestIndex, centroid };
