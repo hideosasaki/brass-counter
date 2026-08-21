@@ -17,6 +17,7 @@ function Game() {
   const navigate = useNavigate();
   const [players, setPlayers] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [copied, setCopied] = useState(false);
 
   useEffect(() => {
     if (!gameId) return undefined;
@@ -122,10 +123,52 @@ function Game() {
     setAllPlayers(players.map((player) => initialPlayer(player.color)));
   };
 
+  // Hand the game URL to the other players: the OS share sheet where
+  // available (phones), otherwise copy the link to the clipboard. Both APIs
+  // need https; on plain http the button does nothing, which is fine for a
+  // dev server.
+  const shareGame = () => {
+    const url = window.location.href;
+    if (navigator.share) {
+      navigator.share({ title: `Brass Game ${gameId}`, url }).catch(() => {});
+    } else if (navigator.clipboard) {
+      navigator.clipboard.writeText(url).then(() => {
+        setCopied(true);
+        setTimeout(() => setCopied(false), 1500);
+      });
+    }
+  };
+
   return (
     <div className="container">
       <div className="row align-items-center mb-2 mt-2">
-        <div className="col fs-2">Game {gameId}</div>
+        <div className="col-auto fs-2 pe-0">Game {gameId}</div>
+        <div className="col-auto">
+          <button
+            className="btn p-1 text-secondary"
+            aria-label="Share game link"
+            onClick={shareGame}
+          >
+            {copied ? (
+              <span className="small">Copied</span>
+            ) : (
+              <svg
+                width="26"
+                height="26"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              >
+                <path d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8" />
+                <polyline points="16 6 12 2 8 6" />
+                <line x1="12" y1="2" x2="12" y2="15" />
+              </svg>
+            )}
+          </button>
+        </div>
       </div>
 
       {players.map((player, index) => (
