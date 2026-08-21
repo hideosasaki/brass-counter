@@ -1,7 +1,6 @@
 import {
   cellGrid,
   fitGain,
-  classifyPatch,
   classifyAlignedPatch,
   decideLink,
   linkSamplePoints,
@@ -89,28 +88,6 @@ describe("fitGain", () => {
   });
 });
 
-describe("classifyPatch", () => {
-  test("an unchanged patch produces a near-zero mask", () => {
-    const pc = cellGrid(makePatchImage(SIZE, GRAY), PATCH_HALF, PATCH_HALF);
-    const rc = cellGrid(makePatchImage(SIZE, GRAY), PATCH_HALF, PATCH_HALF);
-    const { frac } = classifyPatch(pc, rc, [1, 1, 1]);
-    expect(frac).toBeLessThan(0.02);
-  });
-
-  test("a colored blob over the reference is masked", () => {
-    const pc = cellGrid(
-      makePatchImage(SIZE, GRAY, { r: 40, color: [220, 180, 50] }),
-      PATCH_HALF, PATCH_HALF
-    );
-    const rc = cellGrid(makePatchImage(SIZE, GRAY), PATCH_HALF, PATCH_HALF);
-    const { frac, masked } = classifyPatch(pc, rc, [1, 1, 1]);
-    expect(frac).toBeGreaterThan(0.15);
-    const mean = masked.reduce((a, c) => a.map((v, k) => v + c[k]), [0, 0, 0])
-      .map((v) => v / masked.length);
-    expect(mean[0]).toBeGreaterThan(mean[2]); // yellow-ish
-  });
-});
-
 describe("classifyAlignedPatch", () => {
   test("an empty patch carries the alignment shift as its centroid", () => {
     const pc = cellGrid(makePatchImage(SIZE, GRAY), PATCH_HALF, PATCH_HALF);
@@ -130,6 +107,9 @@ describe("classifyAlignedPatch", () => {
     const r = classifyAlignedPatch(pc, rc, [1, 1, 1], [8, 8]);
     expect(r.frac).toBeGreaterThan(0.15);
     expect(r.comps.length).toBeGreaterThan(0);
+    const mean = r.masked.reduce((a, c) => a.map((v, k) => v + c[k]), [0, 0, 0])
+      .map((v) => v / r.masked.length);
+    expect(mean[0]).toBeGreaterThan(mean[2]); // yellow-ish
     // Blob is at the patch center, so the centroid is the shift itself.
     expect(Math.abs(r.centroid[0] - 8)).toBeLessThan(4);
     expect(Math.abs(r.centroid[1] - 8)).toBeLessThan(4);

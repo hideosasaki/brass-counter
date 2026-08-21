@@ -12,7 +12,7 @@ import {
   sessionClassesOf,
   playerLabelOf,
 } from "./linkDisplay";
-import { ownedLinksFromPayload } from "./linkScoreData";
+import { ownedLinksFromPayload, MAX_LINK_ICONS } from "./linkScoreData";
 import { eraTitle } from "./eras";
 import DonateLink from "./DonateLink";
 import "bootstrap/dist/css/bootstrap.min.css";
@@ -185,7 +185,9 @@ function LinkScore() {
               </span>
               <button
                 className="btn btn-secondary"
-                onClick={() => setIconCount(loc, Math.min(8, (icons[loc] || 0) + 1))}
+                onClick={() =>
+                  setIconCount(loc, Math.min(MAX_LINK_ICONS, (icons[loc] || 0) + 1))
+                }
               >
                 +
               </button>

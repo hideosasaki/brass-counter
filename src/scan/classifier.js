@@ -36,7 +36,7 @@ export function linkSamplePoints(linkId) {
 }
 
 // Index of the sample point with the strongest detection.
-export const strongestIndex = (results) =>
+const strongestIndex = (results) =>
   results.reduce((a, _, i) => (results[i].frac > results[a].frac ? i : a), 0);
 
 // Where the tile actually sits: the calibrated sample point, shifted to the
@@ -205,13 +205,6 @@ function finishPatch(cells, cellsInDisc) {
   };
 }
 
-// One-shot mask + stats, without glare filtering or alignment. Unit tests
-// and the reference tooling use this raw form.
-export function classifyPatch(pc, rc, gain) {
-  const { cells, cellsInDisc } = maskPatch(pc, rc, gain);
-  return finishPatch(cells, cellsInDisc);
-}
-
 // The full per-patch classification used in production: mask the diff, split
 // it into connected components, drop glare blobs, and express the centroid
 // (and each kept component's centroid) relative to the CALIBRATED point by
@@ -330,6 +323,17 @@ export function decideLink({ results, allowed, side, chromaOffset = [0, 0] }) {
   }
   return { state, color, frac, dist: bestD, margin, bestIndex, centroid, shift, uv: uvRaw };
 }
+
+// A link's color decision and the evidence behind it, cleared. Callers that
+// overrule decideLink (a link that cannot exist this era, one emptied as a
+// neighbour's crosstalk) spread this over its result, so the fields that back
+// a color are listed in one place, next to the code that fills them.
+export const NO_COLOR = {
+  color: null,
+  dist: undefined,
+  margin: undefined,
+  uv: undefined,
+};
 
 // Estimate the scan-wide chroma tint from confident first-pass detections:
 // the mean deviation of their blobs from their matched prototypes.

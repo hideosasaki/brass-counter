@@ -7,6 +7,10 @@
 
 import { LINKS_BY_ID } from "./boardData";
 
+// A location can show at most this many link icons (mirrored in
+// database.rules.json, which cannot import it).
+export const MAX_LINK_ICONS = 8;
+
 // The scanner's linkId -> class|null assignments as the stored links map.
 // Firebase cannot store null values, so empty links are dropped.
 export function linksFromAssignments(assignments) {

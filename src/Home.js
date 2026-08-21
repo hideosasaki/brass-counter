@@ -1,6 +1,5 @@
 import React from "react";
-import { ref, set } from "firebase/database";
-import { database } from "./firebaseConfig";
+import { updateGame } from "./firebaseConfig";
 import { useNavigate } from "react-router-dom";
 import { PLAYER_COLORS, initialPlayer, playersByIndex } from "./playerDefaults";
 import "bootstrap/dist/css/bootstrap.min.css";
@@ -13,8 +12,7 @@ function Home() {
 
   const createNewGame = async () => {
     const gameId = generateGameId();
-    await set(ref(database, `games/${gameId}`), {
-      lastActive: new Date().toISOString(),
+    await updateGame(gameId, {
       players: playersByIndex(PLAYER_COLORS.map((color) => initialPlayer(color))),
     });
     navigate(`/game/${gameId}`);

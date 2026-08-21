@@ -5,6 +5,7 @@ import { ref, onValue } from "firebase/database";
 import { incomeLevelFromSpace, highestSpaceOfLevel } from "./income";
 import { PLAYER_COLORS, initialPlayer, playersByIndex } from "./playerDefaults";
 import { ERA_LABELS, ERAS } from "./eras";
+import { UNDO_LABELS } from "./undoActions";
 import DonateLink from "./DonateLink";
 import "bootstrap/dist/css/bootstrap.min.css";
 
@@ -15,11 +16,15 @@ const LOAN_INCOME_LEVEL_PENALTY = 3;
 const MIN_INCOME_LEVEL = -10;
 const UNDO_WINDOW_MS = 5000;
 const SCORE_TOAST_MS = 8000;
-const UNDO_LABELS = {
-  reset: "Game reset",
-  removePlayer: "Player removed",
-  endRound: "Round ended",
-};
+
+// A message with its action, shown to everyone at the table.
+const Toast = ({ className, children }) => (
+  <div
+    className={`d-flex align-items-center gap-3 px-3 py-2 rounded shadow ${className}`}
+  >
+    {children}
+  </div>
+);
 
 const undoIsFresh = (undo) =>
   undo && Date.now() - new Date(undo.at).getTime() < UNDO_WINDOW_MS;
@@ -401,31 +406,34 @@ function Game() {
       <div className="clearfix pt-4 pb-3">
         <DonateLink />
       </div>
-      {scoreToast && (
+      {/* One bottom-anchored stack, so several live toasts stack by layout
+          instead of each one knowing the others' heights. */}
+      {(scoreToast || undoInfo) && (
         <div
-          className="position-fixed start-50 translate-middle-x mb-3 d-flex align-items-center gap-3 px-3 py-2 rounded shadow bg-success text-white"
-          style={{ zIndex: 1080, bottom: undoInfo ? 60 : 0 }}
-        >
-          <span className="fw-bold text-nowrap">
-            {ERA_LABELS[scoreToast]} link points shared
-          </span>
-          <button
-            className="btn btn-light"
-            onClick={() => navigate(`/game/${gameId}/score/${scoreToast}`)}
-          >
-            View
-          </button>
-        </div>
-      )}
-      {undoInfo && (
-        <div
-          className="position-fixed bottom-0 start-50 translate-middle-x mb-3 d-flex align-items-center gap-3 px-3 py-2 rounded shadow bg-warning fixed-light-surface"
+          className="position-fixed bottom-0 start-50 translate-middle-x mb-3 d-flex flex-column align-items-center gap-2"
           style={{ zIndex: 1080 }}
         >
-          <span className="fw-bold">{UNDO_LABELS[undoInfo.action]}</span>
-          <button className="btn btn-dark" onClick={performUndo}>
-            Undo
-          </button>
+          {scoreToast && (
+            <Toast className="bg-success text-white">
+              <span className="fw-bold text-nowrap">
+                {ERA_LABELS[scoreToast]} link points shared
+              </span>
+              <button
+                className="btn btn-light"
+                onClick={() => navigate(`/game/${gameId}/score/${scoreToast}`)}
+              >
+                View
+              </button>
+            </Toast>
+          )}
+          {undoInfo && (
+            <Toast className="bg-warning fixed-light-surface">
+              <span className="fw-bold">{UNDO_LABELS[undoInfo.action]}</span>
+              <button className="btn btn-dark" onClick={performUndo}>
+                Undo
+              </button>
+            </Toast>
+          )}
         </div>
       )}
     </div>

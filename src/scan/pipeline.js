@@ -13,7 +13,7 @@ import {
   classifyAlignedPatch,
   decideLink,
   estimateChromaOffset,
-  strongestIndex,
+  NO_COLOR,
   DETECT_MIN_FRAC,
   PATCH_HALF,
   ALIGN_MARGIN,
@@ -252,6 +252,14 @@ export async function scanPhoto(file, { era, allowed, onStage }) {
 // tell one-real-plus-crosstalk from two real tiles, so both go to review.
 const CLOSE_PAIR_DIST = 0.055; // in normalized board units (~113px at 2048)
 
+// Canonical px between the dominant-component centroids seen from the two
+// patches; the same tile measures nearly zero (only patch-edge truncation
+// bias), separate tiles measure at least a tile width.
+const SHARED_BLOB_DIST = 40;
+// Strong/weak frac ratio above which the weak side is just the tile's edge:
+// ambiguous same-tile cases measured 1.3-1.5, edge bleed measured >= 1.9.
+const SHARED_FRAC_RATIO = 1.7;
+
 export const CLOSE_PAIRS = (() => {
   const pairs = [];
   for (let i = 0; i < LINKS.length; i++) {
@@ -301,27 +309,22 @@ export function classifyAllLinks(warpedData, { era, allowed, side }) {
   const chromaOffset = estimateChromaOffset(firstPass, side);
   const out = LINKS.map((link) => {
     const eraValid = era === "canal" ? link.canal : link.rail;
-    const results = patchResults[link.id];
-    if (!eraValid) {
-      // This link cannot exist this era. A strong detection here usually
-      // means a neighbouring link's tile drifted -> let the human place it.
-      const bestIndex = strongestIndex(results);
-      const { frac, centroid, shift } = results[bestIndex];
-      return {
-        linkId: link.id,
-        eraValid,
-        state: frac >= DETECT_MIN_FRAC ? "review" : "auto",
-        color: null,
-        frac,
-        bestIndex,
-        centroid,
-        shift,
-      };
-    }
+    const r = decideLink({
+      results: patchResults[link.id],
+      allowed,
+      side,
+      chromaOffset,
+    });
+    if (eraValid) return { linkId: link.id, eraValid, ...r };
+    // This link cannot exist this era. A strong detection here usually means
+    // a neighbouring link's tile drifted -> let the human place it, so keep
+    // the measurement but not the color.
     return {
       linkId: link.id,
       eraValid,
-      ...decideLink({ results, allowed, side, chromaOffset }),
+      ...r,
+      ...NO_COLOR,
+      state: r.frac >= DETECT_MIN_FRAC ? "review" : r.state,
     };
   });
   const byId = Object.fromEntries(out.map((r) => [r.linkId, r]));
@@ -357,12 +360,9 @@ export function classifyAllLinks(warpedData, { era, allowed, side }) {
         // Emit a coherent empty result, not just a flipped color: consumers
         // gate on frac/centroid, and the map dot must not sit on the
         // neighbour's tile. suppressedBy keeps the audit trail for debug.
-        Object.assign(weak, {
+        Object.assign(weak, NO_COLOR, {
           state: "auto",
-          color: null,
           frac: 0,
-          dist: undefined,
-          margin: undefined,
           centroid: [...weak.shift],
           suppressedBy: strong.linkId,
         });
@@ -375,14 +375,6 @@ export function classifyAllLinks(warpedData, { era, allowed, side }) {
   }
   return out;
 }
-
-// Canonical px between the dominant-component centroids seen from the two
-// patches; the same tile measures nearly zero (only patch-edge truncation
-// bias), separate tiles measure at least a tile width.
-const SHARED_BLOB_DIST = 40;
-// Strong/weak frac ratio above which the weak side is just the tile's edge:
-// ambiguous same-tile cases measured 1.3-1.5, edge bleed measured >= 1.9.
-const SHARED_FRAC_RATIO = 1.7;
 
 // Reference patches (cell grids at every link sample point), computed once
 // per side from a small hidden canvas of the reference... but we do not ship

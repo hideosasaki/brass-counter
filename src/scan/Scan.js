@@ -43,7 +43,7 @@ function Scan() {
   const { gameId, era } = useParams();
   const navigate = useNavigate();
   const [players, setPlayers] = useState(null);
-  const [phase, setPhase] = useState("setup"); // setup/processing/review/map/error
+  const [phase, setPhase] = useState("setup"); // setup/processing/review/map
   const [stage, setStage] = useState("load");
   const [error, setError] = useState(null);
   const [scan, setScan] = useState(null); // {canvas, side, links}
@@ -132,7 +132,7 @@ function Scan() {
       goTo(needsReview ? { phase: "review", reviewIndex: 0 } : { phase: "map" });
     } catch (err) {
       setError(err instanceof ScanError ? err.code : "failed");
-      setPhase("error");
+      setPhase("setup");
     }
   };
 
@@ -186,14 +186,14 @@ function Scan() {
   if (!players) return <div className="container mt-3">Loading...</div>;
 
   // ---- setup -------------------------------------------------------------
-  if (phase === "setup" || phase === "error") {
+  if (phase === "setup") {
     return (
       <div className="container mt-3" style={{ maxWidth: 480 }}>
         <h4>
           Link scoring{" "}
           <small className="text-secondary fs-6">{eraTitle(era)}</small>
         </h4>
-        {phase === "error" && (
+        {error && (
           <div className="alert alert-warning">
             {error === "board_not_found"
               ? "Could not find the board. Retake the photo with the whole board in frame."
@@ -300,7 +300,9 @@ function Scan() {
     return parts.join(" · ");
   };
 
-  const cardFor = (linkId, heading) => {
+  // Always renders cardLinkId, the link cardPatchUrl was cut for.
+  const cardFor = (heading) => {
+    const linkId = cardLinkId;
     const neighbor = crosstalkNeighbor(linkId);
     return (
       <div className="container mt-3" style={{ maxWidth: 480 }}>
@@ -335,10 +337,10 @@ function Scan() {
   };
 
   if (phase === "review") {
-    return cardFor(cardLinkId, `Check ${reviewIndex + 1} / ${reviewIds.length}`);
+    return cardFor(`Check ${reviewIndex + 1} / ${reviewIds.length}`);
   }
   if (editingLink) {
-    return cardFor(cardLinkId, "Edit link");
+    return cardFor("Edit link");
   }
 
   // ---- map overview ---------------------------------------------------------

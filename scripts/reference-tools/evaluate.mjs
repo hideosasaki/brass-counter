@@ -1,15 +1,18 @@
-// Full production-path evaluation on all three ground-truth games.
+// Full production-path evaluation on the ground-truth games.
 // Canonical evaluation of the production classifier over the ground-truth
 // games in ../../tmp/ (gitignored photos). Before running, copy the src
 // modules next to this file with rewritten imports:
 //   sed 's|from "../linkPositions"|from "./linkPositions.mjs"|' ../../src/scan/classifier.js > classifier.mjs
 //   sed -e 's|from "../boardData"|from "./boardData.mjs"|' -e 's|from "./classifier"|from "./classifier.mjs"|' ../../src/scan/pipeline.js > pipeline.mjs
 //   cp ../../src/linkPositions.js linkPositions.mjs && cp ../../src/boardData.js boardData.mjs
-// Latest result (3 games, 117 positions): 108 auto-correct, 9 review, 0 wrong.
+// Latest result (4 games, 156 positions): 144 auto-correct, 12 review, 0 wrong.
 import { readFileSync } from "fs";
-import { CANONICAL_SIZE } from "./classifier.mjs";
+import {
+  CANONICAL_SIZE,
+  DETECT_MIN_FRAC,
+  linkSamplePoints,
+} from "./classifier.mjs";
 import { classifyAllLinks, setRefPatches, CLOSE_PAIRS } from "./pipeline.mjs";
-import { linkSamplePoints } from "./classifier.mjs";
 import Jimp from "./node_modules/jimp/dist/index.js";
 
 setRefPatches(JSON.parse(readFileSync("../../public/scan/ref_patches.json", "utf8")));
@@ -51,7 +54,7 @@ for (const [file, { side, era, allowed, truth }] of Object.entries(SETS)) {
   console.log("==", file);
   const byId = Object.fromEntries(links.map((r) => [r.linkId, r]));
   for (const [a, b] of CLOSE_PAIRS) {
-    if (byId[a].frac >= 0.12 && byId[b].frac >= 0.12) {
+    if (byId[a].frac >= DETECT_MIN_FRAC && byId[b].frac >= DETECT_MIN_FRAC) {
       const gc = (r) => {
         const [nx, ny] = linkSamplePoints(r.linkId)[r.bestIndex || 0];
         return [nx * CANONICAL_SIZE + r.centroid[0], ny * CANONICAL_SIZE + r.centroid[1]];
