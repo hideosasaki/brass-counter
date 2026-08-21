@@ -526,12 +526,12 @@ function Scan() {
               <span><LocationName id={loc} /></span>
               <span className="btn-group">
                 <button
-                  className="btn btn-dark"
+                  className="btn btn-outline-secondary"
                   onClick={() => setIcons((ic) => ({ ...ic, [loc]: Math.max(0, (ic[loc] || 0) - 1) }))}
                 >
                   −
                 </button>
-                <span className="btn btn-light disabled" style={{ minWidth: 44 }}>
+                <span className="btn border pe-none" style={{ minWidth: 44 }}>
                   {icons[loc] || 0}
                 </span>
                 <button

@@ -129,9 +129,9 @@ function Game() {
       </div>
 
       {players.map((player, index) => (
-        <div className="card mb-1 text-bg-light" key={index}>
+        <div className="card mb-1" key={index}>
           <div
-            className="card-header"
+            className="card-header fixed-light-surface"
             style={{ backgroundColor: player.color }}
           >
             <div className="fs-2">{`#${index + 1} `}</div>
@@ -150,7 +150,7 @@ function Game() {
               <div className="col d-grid gap-2">
                 <div className="btn-group" role="group" aria-label="Money">
                   <button
-                    className="btn btn-dark"
+                    className="btn btn-outline-secondary"
                     onClick={() => adjustMoney(index, -1)}
                   >
                     -
@@ -161,7 +161,7 @@ function Game() {
                   >
                     +
                   </button>
-                  <button className="btn btn-dark" onClick={() => loan(index)}>
+                  <button className="btn btn-outline-secondary" onClick={() => loan(index)}>
                     Loan
                   </button>
                 </div>
@@ -173,7 +173,7 @@ function Game() {
               <div className="col d-grid gap-2">
                 <div className="btn-group" role="group" aria-label="Spent">
                   <button
-                    className="btn btn-dark"
+                    className="btn btn-outline-secondary"
                     onClick={() => adjustSpent(index, -1)}
                   >
                     -
@@ -185,7 +185,7 @@ function Game() {
                     +
                   </button>
                   <button
-                    className="btn btn-dark"
+                    className="btn btn-outline-secondary"
                     onClick={() => adjustSpent(index, 5)}
                   >
                     +5
@@ -206,7 +206,7 @@ function Game() {
                   aria-label="Income Track"
                 >
                   <button
-                    className="btn btn-dark"
+                    className="btn btn-outline-secondary"
                     onClick={() => adjustIncomePosition(index, -1)}
                   >
                     -

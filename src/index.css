@@ -7,6 +7,17 @@ body {
   -moz-osx-font-smoothing: grayscale;
 }
 
+/* A surface painted with a fixed light-ish color (player-colored card
+   headers) keeps its dark foreground in both themes. The .btn-close rule
+   must out-cascade Bootstrap's [data-bs-theme=dark] .btn-close inversion:
+   same specificity, but this file is bundled after bootstrap.min.css. */
+.fixed-light-surface {
+  color: #212529;
+}
+.fixed-light-surface .btn-close {
+  filter: none;
+}
+
 code {
   font-family: source-code-pro, Menlo, Monaco, Consolas, 'Courier New',
     monospace;
