@@ -2,11 +2,18 @@ import {
   cellGrid,
   fitGain,
   classifyPatch,
+  classifyAlignedPatch,
   decideLink,
   linkSamplePoints,
   parseRefBin,
+  alignPatch,
+  splitComponents,
+  isGlare,
+  GLARE_CORR,
+  GLARE_MIN_CELLS,
   PATCH_HALF,
   CELL,
+  ALIGN_MARGIN,
 } from "./classifier";
 import { LINKS } from "../boardData";
 
@@ -43,6 +50,34 @@ describe("cellGrid", () => {
   });
 });
 
+describe("alignPatch", () => {
+  test("recovers a local misalignment and reports the shift back to the true spot", () => {
+    // Deterministic texture so the luma correlation has a unique optimum.
+    const size = 2 * (PATCH_HALF + ALIGN_MARGIN) + 64;
+    const data = new Uint8ClampedArray(size * size * 4);
+    for (let y = 0; y < size; y++) {
+      for (let x = 0; x < size; x++) {
+        const i = (y * size + x) * 4;
+        data[i] = (x * 37) % 256;
+        data[i + 1] = (y * 53) % 256;
+        data[i + 2] = ((x + y) * 29) % 256;
+        data[i + 3] = 255;
+      }
+    }
+    const img = { data, width: size, height: size };
+    const cx = size / 2, cy = size / 2;
+    const ref = cellGrid(img, cx, cy, PATCH_HALF);
+    // Sample as if the calibrated point were off by (+16, -8) px.
+    const off = [16, -8];
+    const large = cellGrid(img, cx + off[0], cy + off[1], PATCH_HALF + ALIGN_MARGIN);
+    const { cells, shift } = alignPatch(large, ref);
+    // The aligned cells match the reference, and sampled-point + shift lands
+    // back on the true content position.
+    expect(shift).toEqual([-off[0], -off[1]]);
+    expect(cells).toEqual(ref);
+  });
+});
+
 describe("fitGain", () => {
   test("recovers a per-channel gain between photo and reference", () => {
     const photo = cellGrid(makePatchImage(SIZE, [100, 100, 100]), PATCH_HALF, PATCH_HALF);
@@ -73,6 +108,75 @@ describe("classifyPatch", () => {
     const mean = masked.reduce((a, c) => a.map((v, k) => v + c[k]), [0, 0, 0])
       .map((v) => v / masked.length);
     expect(mean[0]).toBeGreaterThan(mean[2]); // yellow-ish
+  });
+});
+
+describe("classifyAlignedPatch", () => {
+  test("an empty patch carries the alignment shift as its centroid", () => {
+    const pc = cellGrid(makePatchImage(SIZE, GRAY), PATCH_HALF, PATCH_HALF);
+    const rc = cellGrid(makePatchImage(SIZE, GRAY), PATCH_HALF, PATCH_HALF);
+    const r = classifyAlignedPatch(pc, rc, [1, 1, 1], [16, -8]);
+    expect(r.frac).toBeLessThan(0.02);
+    expect(r.centroid).toEqual([16, -8]);
+    expect(r.shift).toEqual([16, -8]);
+  });
+
+  test("a colored blob keeps its detection and shifted centroid", () => {
+    const pc = cellGrid(
+      makePatchImage(SIZE, GRAY, { r: 40, color: [220, 180, 50] }),
+      PATCH_HALF, PATCH_HALF
+    );
+    const rc = cellGrid(makePatchImage(SIZE, GRAY), PATCH_HALF, PATCH_HALF);
+    const r = classifyAlignedPatch(pc, rc, [1, 1, 1], [8, 8]);
+    expect(r.frac).toBeGreaterThan(0.15);
+    expect(r.comps.length).toBeGreaterThan(0);
+    // Blob is at the patch center, so the centroid is the shift itself.
+    expect(Math.abs(r.centroid[0] - 8)).toBeLessThan(4);
+    expect(Math.abs(r.centroid[1] - 8)).toBeLessThan(4);
+  });
+});
+
+describe("splitComponents", () => {
+  const cell = (px, py, pl = 100, rl = 50) => ({
+    px, py, c: [pl, pl, pl], pl, rl, inDisc: true,
+  });
+
+  test("separates two disconnected blobs", () => {
+    const blobA = [cell(0, 0), cell(CELL, 0), cell(0, CELL)];
+    const blobB = [cell(10 * CELL, 0), cell(11 * CELL, 0)];
+    const comps = splitComponents([...blobA, ...blobB]);
+    expect(comps).toHaveLength(2);
+    expect(comps.map((c) => c.cells.length).sort()).toEqual([2, 3]);
+  });
+
+  test("diagonal neighbours join one component", () => {
+    const comps = splitComponents([cell(0, 0), cell(CELL, CELL)]);
+    expect(comps).toHaveLength(1);
+  });
+
+  test("glare correlates with the reference, a tile does not", () => {
+    // Glare: photo luma tracks the reference art's luma (brightened).
+    const glare = [];
+    for (let i = 0; i < GLARE_MIN_CELLS + 2; i++) {
+      glare.push(cell(i * CELL, 0, 100 + i * 10, 40 + i * 10));
+    }
+    const [glareComp] = splitComponents(glare);
+    expect(glareComp.corr).toBeGreaterThan(GLARE_CORR);
+    expect(isGlare(glareComp)).toBe(true);
+
+    // Tile: flat photo luma over varying art.
+    const tile = [];
+    for (let i = 0; i < GLARE_MIN_CELLS + 2; i++) {
+      tile.push(cell(i * CELL, 0, 180 + (i % 2), 40 + i * 10));
+    }
+    const [tileComp] = splitComponents(tile);
+    expect(isGlare(tileComp)).toBe(false);
+  });
+
+  test("a small blob is never called glare, whatever its correlation", () => {
+    const small = [cell(0, 0, 100, 40), cell(CELL, 0, 120, 60)];
+    const [comp] = splitComponents(small);
+    expect(isGlare(comp)).toBe(false);
   });
 });
 

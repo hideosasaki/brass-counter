@@ -1,8 +1,8 @@
 // Pure classification logic for the board scanner. Works on ImageData-like
 // objects ({data, width, height} RGBA) in the canonical board frame, so it is
 // unit-testable without OpenCV or a DOM. Method and thresholds were tuned
-// against two real games (78 link positions: 68 auto-correct, 10 review,
-// 0 wrong automatic answers); see scripts/reference-tools/classify_harness.js.
+// against four real games (156 link positions: 144 auto-correct, 12 review,
+// 0 wrong automatic answers); see scripts/reference-tools/evaluate.mjs.
 import { LINK_POSITIONS } from "../linkPositions";
 
 export const CANONICAL_SIZE = 2048;
@@ -40,17 +40,17 @@ export const strongestIndex = (results) =>
   results.reduce((a, _, i) => (results[i].frac > results[a].frac ? i : a), 0);
 
 // Where the tile actually sits: the calibrated sample point, shifted to the
-// detected mask centroid when there is a detection. Normalized coords.
+// detected mask centroid when there is a detection. Empty links still get
+// the local alignment shift, so their dots land on the photo's actual spot
+// when the global homography has a residual there. Normalized coords.
 export function detectedPoint(linkId, result) {
   const pts = linkSamplePoints(linkId);
-  if (result && result.frac >= DETECT_MIN_FRAC && result.centroid) {
-    const [nx, ny] = pts[result.bestIndex || 0];
-    return [
-      nx + result.centroid[0] / CANONICAL_SIZE,
-      ny + result.centroid[1] / CANONICAL_SIZE,
-    ];
-  }
-  return pts[0];
+  const [nx, ny] = pts[(result && result.bestIndex) || 0];
+  const [ox, oy] =
+    result && result.frac >= DETECT_MIN_FRAC && result.centroid
+      ? result.centroid
+      : (result && result.shift) || [0, 0];
+  return [nx + ox / CANONICAL_SIZE, ny + oy / CANONICAL_SIZE];
 }
 
 // Parse public/scan/ref_*.bin: [uint32 n][n*2 float32 x,y][n*32 uint8 desc]
@@ -113,7 +113,10 @@ const luma = ([r, g, b]) => 0.299 * r + 0.587 * g + 0.114 * b;
 
 // Pick the sub-grid of an enlarged scan patch that best matches the
 // reference patch (zero-mean luma correlation over cell shifts), undoing the
-// local residual of the global homography.
+// local residual of the global homography. Returns the aligned cells plus the
+// shift in canonical px from the calibrated point to the aligned patch
+// center; mask centroids are relative to that shifted center, so consumers
+// need the shift to place a blob in board coordinates.
 export function alignPatch(pcLarge, rc) {
   const nRef = Math.sqrt(rc.length) | 0;
   const nLarge = Math.sqrt(pcLarge.length) | 0;
@@ -144,7 +147,7 @@ export function alignPatch(pcLarge, rc) {
     const gx = i % nRef, gy = (i / nRef) | 0;
     out[i] = pcLarge[(gy + sy) * nLarge + (gx + sx)];
   }
-  return out;
+  return { cells: out, shift: [(sx - m) * CELL, (sy - m) * CELL] };
 }
 const chroma = ([r, g, b]) => {
   const s = r + g + b + 1e-6;
@@ -154,37 +157,134 @@ const chroma = ([r, g, b]) => {
 // Compare one photo patch against the empty-board reference patch.
 // Chroma difference dominates; luma difference is compensated by the patch
 // median so shadows and glare gradients do not fire the mask.
-export function classifyPatch(pc, rc, gain) {
+// The mask covers the FULL patch (not just the decision disc): blobs
+// straddling the disc edge must be seen whole so component filtering can
+// judge and assign them; only in-disc cells count toward frac/color.
+function maskPatch(pc, rc, gain) {
   const n = Math.sqrt(pc.length) | 0;
   const dys = pc.map((cell, i) => luma(cell.map((v, k) => v * gain[k])) - luma(rc[i]));
   const sorted = [...dys].sort((a, b) => a - b);
   const medDy = sorted[(sorted.length / 2) | 0];
-  const masked = [];
+  const cells = [];
   let cellsInDisc = 0;
-  let sumX = 0, sumY = 0;
   for (let i = 0; i < pc.length; i++) {
     const gx = i % n, gy = (i / n) | 0;
     const px = gx * CELL + CELL / 2 - PATCH_HALF;
     const py = gy * CELL + CELL / 2 - PATCH_HALF;
-    if (px * px + py * py > CENTER_R * CENTER_R) continue;
-    cellsInDisc++;
+    const inDisc = px * px + py * py <= CENTER_R * CENTER_R;
+    if (inDisc) cellsInDisc++;
     const c = pc[i].map((v, k) => v * gain[k]);
     const [pu, pv] = chroma(c);
     const [ru, rv] = chroma(rc[i]);
     const dChroma = Math.hypot(pu - ru, pv - rv) * 500;
     const dLuma = Math.abs(dys[i] - medDy);
     if (dChroma + dLuma * 0.4 > MASK_SCORE_THRESHOLD) {
-      masked.push(c);
-      sumX += px; sumY += py;
+      cells.push({ px, py, c, pl: luma(c), rl: luma(rc[i]), inDisc });
     }
   }
+  return { cells, cellsInDisc };
+}
+
+// Reduce a masked-cell set to the per-patch decision values. frac, the color
+// samples and the centroid all come from the in-disc cells only, matching
+// the thresholds tuned on disc-based masks.
+function finishPatch(cells, cellsInDisc) {
+  const inDisc = cells.filter((c) => c.inDisc);
+  let sumX = 0, sumY = 0;
+  for (const c of inDisc) { sumX += c.px; sumY += c.py; }
   // Mask centroid (relative to the patch center). Comparing centroids of
   // neighbouring patches in board coordinates tells one shared blob apart
   // from two separate tiles.
-  const centroid = masked.length
-    ? [sumX / masked.length, sumY / masked.length]
+  const centroid = inDisc.length
+    ? [sumX / inDisc.length, sumY / inDisc.length]
     : [0, 0];
-  return { frac: cellsInDisc ? masked.length / cellsInDisc : 0, masked, centroid };
+  return {
+    frac: cellsInDisc ? inDisc.length / cellsInDisc : 0,
+    masked: inDisc.map((c) => c.c),
+    centroid,
+  };
+}
+
+// One-shot mask + stats, without glare filtering or alignment. Unit tests
+// and the reference tooling use this raw form.
+export function classifyPatch(pc, rc, gain) {
+  const { cells, cellsInDisc } = maskPatch(pc, rc, gain);
+  return finishPatch(cells, cellsInDisc);
+}
+
+// The full per-patch classification used in production: mask the diff, split
+// it into connected components, drop glare blobs, and express the centroid
+// (and each kept component's centroid) relative to the CALIBRATED point by
+// folding in the local alignment shift. Every coordinate a consumer sees
+// from here on uses that one convention.
+export function classifyAlignedPatch(pc, rc, gain, shift) {
+  const { cells, cellsInDisc } = maskPatch(pc, rc, gain);
+  const comps = splitComponents(cells).filter((c) => !isGlare(c));
+  const r = finishPatch(comps.flatMap((c) => c.cells), cellsInDisc);
+  const fold = ([x, y]) => [x + shift[0], y + shift[1]];
+  return {
+    ...r,
+    shift,
+    centroid: fold(r.centroid),
+    comps: comps.map((c) => ({ ...c, centroid: fold(c.centroid) })),
+  };
+}
+
+// Glare (a sheen on the glossy board) desaturates a region toward neutral
+// white, which fires the chroma mask just like a white tile. The tell: the
+// board art stays visible through glare, so the photo's luma still tracks
+// the reference's, while a real tile hides the art completely. Measured on
+// four games: glare/ghost blobs correlate >= 0.7, real tiles <= 0.36.
+export const GLARE_CORR = 0.55;
+export const GLARE_MIN_CELLS = 8;
+
+export const isGlare = (comp) =>
+  comp.cells.length >= GLARE_MIN_CELLS && comp.corr >= GLARE_CORR;
+
+// Split a patch's masked cells into 8-connected components on the cell grid.
+// Cells are keyed by integer grid index; the 64 stride is safe because patch
+// grids are far narrower than 64 cells, so rows cannot collide.
+export function splitComponents(cells) {
+  const key = (c) => ((c.py / CELL) | 0) * 64 + ((c.px / CELL) | 0);
+  const byKey = new Map(cells.map((c) => [key(c), c]));
+  const seen = new Set();
+  const comps = [];
+  for (const cell of cells) {
+    const k0 = key(cell);
+    if (seen.has(k0)) continue;
+    seen.add(k0);
+    const members = [];
+    const queue = [cell];
+    while (queue.length) {
+      const cur = queue.pop();
+      members.push(cur);
+      const k = key(cur);
+      for (const d of [-65, -64, -63, -1, 1, 63, 64, 65]) {
+        const nb = byKey.get(k + d);
+        if (nb && !seen.has(k + d)) {
+          seen.add(k + d);
+          queue.push(nb);
+        }
+      }
+    }
+    comps.push(makeComponent(members));
+  }
+  return comps;
+}
+
+function makeComponent(cells) {
+  let sx = 0, sy = 0, mp = 0, mr = 0;
+  for (const c of cells) { sx += c.px; sy += c.py; mp += c.pl; mr += c.rl; }
+  const n = cells.length;
+  mp /= n; mr /= n;
+  let sxy = 0, sxx = 0, syy = 0;
+  for (const c of cells) {
+    sxy += (c.pl - mp) * (c.rl - mr);
+    sxx += (c.pl - mp) ** 2;
+    syy += (c.rl - mr) ** 2;
+  }
+  const corr = n >= 2 ? sxy / Math.sqrt(sxx * syy + 1e-9) : 0;
+  return { cells, centroid: [sx / n, sy / n], corr };
 }
 
 function nearestProto(uv, side, allowed) {
@@ -206,9 +306,9 @@ function nearestProto(uv, side, allowed) {
 // camera or lighting tint measured on one color corrects the others too.
 export function decideLink({ results, allowed, side, chromaOffset = [0, 0] }) {
   const bestIndex = strongestIndex(results);
-  const { frac, masked, centroid } = results[bestIndex];
+  const { frac, masked, centroid, shift } = results[bestIndex];
   if (frac < DETECT_MIN_FRAC) {
-    return { state: "auto", color: null, frac, bestIndex, centroid };
+    return { state: "auto", color: null, frac, bestIndex, centroid, shift };
   }
   const mean = masked
     .reduce((a, c) => a.map((v, k) => v + c[k]), [0, 0, 0])
@@ -228,7 +328,7 @@ export function decideLink({ results, allowed, side, chromaOffset = [0, 0] }) {
   } else if (frac < AUTO_MIN_FRAC || bestD > AUTO_MAX_DIST || margin < AUTO_MIN_MARGIN) {
     state = "review";
   }
-  return { state, color, frac, dist: bestD, margin, bestIndex, centroid, uv: uvRaw };
+  return { state, color, frac, dist: bestD, margin, bestIndex, centroid, shift, uv: uvRaw };
 }
 
 // Estimate the scan-wide chroma tint from confident first-pass detections:

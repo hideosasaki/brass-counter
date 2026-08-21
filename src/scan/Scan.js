@@ -469,11 +469,16 @@ function Scan() {
                 inliers: scan.inliers,
                 era,
                 allowed: sessionClasses,
-                links: scan.links.map(({ linkId, state, color, frac, dist, margin }) => ({
+                links: scan.links.map(({ linkId, state, color, frac, dist, margin, centroid, shift, suppressedBy }) => ({
                   linkId, state, color,
                   frac: Number(frac.toFixed(3)),
                   dist: dist !== undefined ? Number(dist.toFixed(3)) : undefined,
                   margin: margin !== undefined && margin < 1 ? Number(margin.toFixed(3)) : undefined,
+                  // canonical px relative to the calibrated point (align
+                  // shift already folded into the centroid)
+                  centroid: frac >= DETECT_MIN_FRAC && centroid ? centroid.map(Math.round) : undefined,
+                  shift,
+                  suppressedBy,
                 })),
               };
               const text = JSON.stringify(report);

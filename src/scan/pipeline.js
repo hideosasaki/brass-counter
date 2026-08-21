@@ -10,9 +10,8 @@ import {
   cellGrid,
   alignPatch,
   fitGain,
-  classifyPatch,
+  classifyAlignedPatch,
   decideLink,
-  detectedPoint,
   estimateChromaOffset,
   strongestIndex,
   DETECT_MIN_FRAC,
@@ -256,14 +255,15 @@ export function classifyAllLinks(warpedData, { era, allowed, side }) {
         Math.round(ny * CANONICAL_SIZE),
         PATCH_HALF + ALIGN_MARGIN
       );
-      return { pc: alignPatch(pcLarge, rc), rc };
+      const { cells, shift } = alignPatch(pcLarge, rc);
+      return { pc: cells, rc, shift };
     });
   }
   const gain = fitGain(Object.values(pairsById).flat());
   const patchResults = {};
   for (const link of LINKS) {
-    patchResults[link.id] = pairsById[link.id].map(({ pc, rc }) =>
-      classifyPatch(pc, rc, gain)
+    patchResults[link.id] = pairsById[link.id].map(({ pc, rc, shift }) =>
+      classifyAlignedPatch(pc, rc, gain, shift)
     );
   }
   // First pass without adaptation, only to estimate this scan's color tint
@@ -281,7 +281,7 @@ export function classifyAllLinks(warpedData, { era, allowed, side }) {
       // This link cannot exist this era. A strong detection here usually
       // means a neighbouring link's tile drifted -> let the human place it.
       const bestIndex = strongestIndex(results);
-      const { frac, centroid } = results[bestIndex];
+      const { frac, centroid, shift } = results[bestIndex];
       return {
         linkId: link.id,
         eraValid,
@@ -290,6 +290,7 @@ export function classifyAllLinks(warpedData, { era, allowed, side }) {
         frac,
         bestIndex,
         centroid,
+        shift,
       };
     }
     return {
@@ -299,18 +300,48 @@ export function classifyAllLinks(warpedData, { era, allowed, side }) {
     };
   });
   const byId = Object.fromEntries(out.map((r) => [r.linkId, r]));
-  const globalCentroid = (r) =>
-    detectedPoint(r.linkId, r).map((v) => v * CANONICAL_SIZE);
+  // Board-coordinate centroid of the component that dominates a link's disc
+  // mask. The mask spans the full patch, so a tile straddling two patches is
+  // seen whole by both: the same physical tile yields (nearly) the same
+  // board centroid from either side, while two separate tiles do not.
+  const dominantComponent = (r) => {
+    const [nx, ny] = linkSamplePoints(r.linkId)[r.bestIndex || 0];
+    let best = null, bestIn = 0;
+    for (const comp of patchResults[r.linkId][r.bestIndex || 0].comps) {
+      const inDisc = comp.cells.filter((c) => c.inDisc).length;
+      if (inDisc > bestIn) { bestIn = inDisc; best = comp; }
+    }
+    if (!best) return null;
+    return [
+      nx * CANONICAL_SIZE + best.centroid[0],
+      ny * CANONICAL_SIZE + best.centroid[1],
+    ];
+  };
   for (const [a, b] of CLOSE_PAIRS) {
     const ra = byId[a], rb = byId[b];
-    if (ra.frac >= DETECT_MIN_FRAC && rb.frac >= DETECT_MIN_FRAC) {
-      // Both patches fire. If their mask centroids point at the same spot on
-      // the board, it is one tile seen from two patches; a machine cannot
-      // decide which link owns it, so both go to review. Two clearly
-      // separate blobs are two tiles and stay as decided.
-      const [ax, ay] = globalCentroid(ra);
-      const [bx, by] = globalCentroid(rb);
-      if (Math.hypot(ax - bx, ay - by) < SHARED_BLOB_DIST) {
+    if (ra.frac < DETECT_MIN_FRAC || rb.frac < DETECT_MIN_FRAC) continue;
+    const pa = dominantComponent(ra), pb = dominantComponent(rb);
+    if (!pa || !pb) continue;
+    if (Math.hypot(pa[0] - pb[0], pa[1] - pb[1]) < SHARED_BLOB_DIST) {
+      // One tile seen from two patches. When one side sees far more of it,
+      // the tile is on that link and the other side only caught its edge:
+      // empty the weak side. Comparable strengths are genuinely ambiguous,
+      // so ask the human.
+      const [strong, weak] = ra.frac >= rb.frac ? [ra, rb] : [rb, ra];
+      if (strong.frac >= SHARED_FRAC_RATIO * weak.frac) {
+        // Emit a coherent empty result, not just a flipped color: consumers
+        // gate on frac/centroid, and the map dot must not sit on the
+        // neighbour's tile. suppressedBy keeps the audit trail for debug.
+        Object.assign(weak, {
+          state: "auto",
+          color: null,
+          frac: 0,
+          dist: undefined,
+          margin: undefined,
+          centroid: [...weak.shift],
+          suppressedBy: strong.linkId,
+        });
+      } else {
         for (const r of [ra, rb]) {
           if (r.state === "auto" && r.color) r.state = "review";
         }
@@ -320,7 +351,13 @@ export function classifyAllLinks(warpedData, { era, allowed, side }) {
   return out;
 }
 
-const SHARED_BLOB_DIST = 55; // canonical px between the two mask centroids
+// Canonical px between the dominant-component centroids seen from the two
+// patches; the same tile measures nearly zero (only patch-edge truncation
+// bias), separate tiles measure at least a tile width.
+const SHARED_BLOB_DIST = 40;
+// Strong/weak frac ratio above which the weak side is just the tile's edge:
+// ambiguous same-tile cases measured 1.3-1.5, edge bleed measured >= 1.9.
+const SHARED_FRAC_RATIO = 1.7;
 
 // Reference patches (cell grids at every link sample point), computed once
 // per side from a small hidden canvas of the reference... but we do not ship

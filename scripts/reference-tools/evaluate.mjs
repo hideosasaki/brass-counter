@@ -36,6 +36,12 @@ const SETS = {
     "coalbrookdale-shrewsbury":"red","coalbrookdale-wolverhampton":"red","dudley-wolverhampton":"red",
     "birmingham-coventry":"yellow","birmingham-dudley":"yellow","birmingham-oxford":"yellow",
     "birmingham-nuneaton":"yellow" } },
+  // Strong glare over the Derby area plus a boat between the belper-derby and
+  // derby-nottingham sample points; the original classifier double-counted it.
+  "warped_0682.jpg": { side: "day", era: "canal", allowed: ["yellow", "red", "pink", "white"], truth: {
+    "coalbrookdale-shrewsbury":"red","coalbrookdale-wolverhampton":"red","dudley-wolverhampton":"red",
+    "stafford-stone":"pink","derby-nottingham":"white","birmingham-coventry":"yellow",
+    "birmingham-dudley":"yellow","birmingham-oxford":"yellow","birmingham-tamworth":"yellow" } },
 };
 
 let okAuto = 0, review = 0, wrong = 0, total = 0;
