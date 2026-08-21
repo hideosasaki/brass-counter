@@ -1,7 +1,7 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { useParams, useNavigate } from "react-router-dom";
-import { database } from "./firebaseConfig";
-import { ref, onValue, update } from "firebase/database";
+import { database, updateGame } from "./firebaseConfig";
+import { ref, onValue } from "firebase/database";
 import { incomeLevelFromSpace, highestSpaceOfLevel } from "./income";
 import { PLAYER_COLORS, initialPlayer, playersByIndex } from "./playerDefaults";
 import DonateLink from "./DonateLink";
@@ -13,6 +13,8 @@ const LOAN_AMOUNT = 30;
 const LOAN_INCOME_LEVEL_PENALTY = 3;
 const MIN_INCOME_LEVEL = -10;
 const UNDO_WINDOW_MS = 5000;
+const SCORE_TOAST_MS = 8000;
+const ERA_LABELS = { canal: "🛶Canal", rail: "🚂Rail" };
 const UNDO_LABELS = {
   reset: "Game reset",
   removePlayer: "Player removed",
@@ -26,9 +28,12 @@ function Game() {
   const { gameId } = useParams();
   const navigate = useNavigate();
   const [players, setPlayers] = useState([]);
+  const [linkScore, setLinkScore] = useState(null);
   const [loading, setLoading] = useState(true);
   const [copied, setCopied] = useState(false);
   const [undoInfo, setUndoInfo] = useState(null);
+  const [scoreToast, setScoreToast] = useState(null); // era string
+  const prevLinkScore = useRef(undefined); // undefined until first snapshot
 
   useEffect(() => {
     if (!gameId) return undefined;
@@ -37,6 +42,27 @@ function Game() {
       if (snapshot.exists()) {
         const data = snapshot.val();
         setPlayers(data.players ? Object.values(data.players) : []);
+        const nextScore = data.linkScore || null;
+        setLinkScore(nextScore);
+        // Toast when an era's result is first shared while this screen is
+        // open: the node newly appeared and is fresh. Later corrections only
+        // rewrite the existing node and stay silent (the score view follows
+        // them live). The freshness check keeps a device that joins later,
+        // where the node "appears" on the first snapshot, from toasting.
+        const prev = prevLinkScore.current;
+        if (prev !== undefined) {
+          for (const era of Object.keys(ERA_LABELS)) {
+            const p = nextScore && nextScore[era];
+            if (
+              p &&
+              !(prev && prev[era]) &&
+              Date.now() - new Date(p.at).getTime() < SCORE_TOAST_MS
+            ) {
+              setScoreToast(era);
+            }
+          }
+        }
+        prevLinkScore.current = nextScore;
         // Keep the previous reference for an unchanged undo node, so
         // unrelated writes (any money tap) don't re-arm the hide timer.
         setUndoInfo((prev) => {
@@ -61,36 +87,52 @@ function Game() {
     return () => clearTimeout(timer);
   }, [undoInfo]);
 
+  useEffect(() => {
+    if (!scoreToast) return undefined;
+    const timer = setTimeout(() => setScoreToast(null), SCORE_TOAST_MS);
+    return () => clearTimeout(timer);
+  }, [scoreToast]);
+
   if (loading) {
     return <div>Loading...</div>;
   }
 
-  // Update only the given fields of one player, plus the activity timestamp,
-  // in a single multi-path write so concurrent edits to other players survive.
+  // Update only the given fields of one player in a single multi-path write
+  // so concurrent edits to other players survive.
   const updatePlayer = (index, fields) => {
-    const updates = { lastActive: new Date().toISOString() };
+    const updates = {};
     for (const [key, value] of Object.entries(fields)) {
       updates[`players/${index}/${key}`] = value;
     }
-    update(ref(database, `games/${gameId}`), updates);
+    updateGame(gameId, updates);
   };
 
   // Replace the whole player list (add/remove/reorder), keyed by index.
   // Destructive actions pass undoAction so every device gets a chance to
   // restore the pre-change snapshot. At most one undo — for the latest such
   // write — exists in the DB; any other list write clears it.
-  const setAllPlayers = (newPlayers, undoAction) => {
-    const now = new Date().toISOString();
-    update(ref(database, `games/${gameId}`), {
-      lastActive: now,
+  // extra: additional top-level fields written (and undone) with the change.
+  const setAllPlayers = (newPlayers, undoAction, extra = {}, undoExtra = {}) => {
+    updateGame(gameId, {
       players: playersByIndex(newPlayers),
+      ...extra,
       undo: undoAction
-        ? { action: undoAction, snapshot: playersByIndex(players), at: now }
+        ? {
+            action: undoAction,
+            snapshot: playersByIndex(players),
+            ...undoExtra,
+            at: new Date().toISOString(),
+          }
         : null,
     });
   };
 
-  const performUndo = () => setAllPlayers(Object.values(undoInfo.snapshot));
+  // Whatever top-level fields the destructive write stored next to its
+  // snapshot (undoExtra) get written back along with the players.
+  const performUndo = () => {
+    const { action, snapshot, at, ...extras } = undoInfo;
+    setAllPlayers(Object.values(snapshot), undefined, extras);
+  };
 
   const adjustMoney = (index, amount) => {
     const money = Math.max(players[index].money + amount, 0);
@@ -155,8 +197,16 @@ function Game() {
     setAllPlayers(players.filter((_, i) => i !== index), "removePlayer");
   };
 
+  // A new game starts without the previous game's link scoring; keep the
+  // wiped result in the undo node so undoing the reset restores it too.
+  // (Firebase drops null values, so an absent linkScore stores nothing.)
   const resetGame = () => {
-    setAllPlayers(players.map((player) => initialPlayer(player.color)), "reset");
+    setAllPlayers(
+      players.map((player) => initialPlayer(player.color)),
+      "reset",
+      { linkScore: null },
+      { linkScore }
+    );
   };
 
   // Hand the game URL to the other players: the OS share sheet where
@@ -313,6 +363,22 @@ function Game() {
           >
             Link scoring (β)
           </button>
+          {linkScore && (
+            <div className="d-flex gap-2">
+              {Object.keys(ERA_LABELS).map(
+                (era) =>
+                  linkScore[era] && (
+                    <button
+                      key={era}
+                      className="btn btn-outline-primary flex-fill"
+                      onClick={() => navigate(`/game/${gameId}/score/${era}`)}
+                    >
+                      {ERA_LABELS[era]} link points
+                    </button>
+                  )
+              )}
+            </div>
+          )}
         </div>
       </div>
       <button className="btn" onClick={resetGame}>
@@ -326,6 +392,22 @@ function Game() {
       <div className="clearfix pt-4 pb-3">
         <DonateLink />
       </div>
+      {scoreToast && (
+        <div
+          className="position-fixed start-50 translate-middle-x mb-3 d-flex align-items-center gap-3 px-3 py-2 rounded shadow bg-success text-white"
+          style={{ zIndex: 1080, bottom: undoInfo ? 60 : 0 }}
+        >
+          <span className="fw-bold text-nowrap">
+            {ERA_LABELS[scoreToast]} link points shared
+          </span>
+          <button
+            className="btn btn-light"
+            onClick={() => navigate(`/game/${gameId}/score/${scoreToast}`)}
+          >
+            View
+          </button>
+        </div>
+      )}
       {undoInfo && (
         <div
           className="position-fixed bottom-0 start-50 translate-middle-x mb-3 d-flex align-items-center gap-3 px-3 py-2 rounded shadow bg-warning fixed-light-surface"

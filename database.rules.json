@@ -28,12 +28,54 @@
             }
           }
         },
+        "linkScore": {
+          "$era": {
+            ".validate": "$era == 'canal' || $era == 'rail'",
+            "links": {
+              "$linkId": {
+                ".validate": "newData.isString() && (newData.val() == 'pink' || newData.val() == 'yellow' || newData.val() == 'white' || newData.val() == 'red')"
+              }
+            },
+            "icons": {
+              "$locationId": {
+                ".validate": "newData.isNumber() && newData.val() >= 0 && newData.val() <= 8"
+              }
+            },
+            "at": {
+              ".validate": "newData.isString() && newData.val().length < 40"
+            },
+            "$other": {
+              ".validate": false
+            }
+          }
+        },
         "undo": {
           "action": {
             ".validate": "newData.isString() && (newData.val() == 'reset' || newData.val() == 'removePlayer' || newData.val() == 'endRound')"
           },
           "at": {
             ".validate": "newData.isString() && newData.val().length < 40"
+          },
+          "linkScore": {
+            "$era": {
+              ".validate": "$era == 'canal' || $era == 'rail'",
+              "links": {
+                "$linkId": {
+                  ".validate": "newData.isString() && (newData.val() == 'pink' || newData.val() == 'yellow' || newData.val() == 'white' || newData.val() == 'red')"
+                }
+              },
+              "icons": {
+                "$locationId": {
+                  ".validate": "newData.isNumber() && newData.val() >= 0 && newData.val() <= 8"
+                }
+              },
+              "at": {
+                ".validate": "newData.isString() && newData.val().length < 40"
+              },
+              "$other": {
+                ".validate": false
+              }
+            }
           },
           "snapshot": {
             "$playerId": {

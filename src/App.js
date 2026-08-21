@@ -4,6 +4,7 @@ import Home from "./Home";
 import Game from "./Game";
 
 const Scan = lazy(() => import("./scan/Scan"));
+const LinkScore = lazy(() => import("./LinkScore"));
 
 function App() {
   return (
@@ -15,6 +16,14 @@ function App() {
         element={
           <Suspense fallback={<div className="container mt-3">Loading...</div>}>
             <Scan />
+          </Suspense>
+        }
+      />
+      <Route
+        path="/game/:gameId/score/:era"
+        element={
+          <Suspense fallback={<div className="container mt-3">Loading...</div>}>
+            <LinkScore />
           </Suspense>
         }
       />

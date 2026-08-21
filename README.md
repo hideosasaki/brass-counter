@@ -18,6 +18,8 @@ Take a photo of the board at the end of an era and the app scores every link til
 
 The whole pipeline runs in your browser. The photo is processed on your device and never uploaded anywhere.
 
+Confirmed links are shared with everyone in the game: every phone gets a live score screen where anyone can enter the icon counts, correct a link's owner, and watch the totals update in real time, just like the shared money counters. Only the link assignments and icon counts are synced; the photo itself stays on the device that took it.
+
 ## Development
 
 Built with Create React App. The usual commands apply:

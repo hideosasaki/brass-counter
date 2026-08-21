@@ -1,5 +1,5 @@
 import { initializeApp } from "firebase/app";
-import { getDatabase } from "firebase/database";
+import { getDatabase, ref, update } from "firebase/database";
 import { getAnalytics } from "firebase/analytics";
 import { initializeAppCheck, ReCaptchaV3Provider } from "firebase/app-check";
 
@@ -29,3 +29,11 @@ if (process.env.NODE_ENV === "production") {
 }
 
 export const database = getDatabase(app);
+
+// Multi-path update on one game that also stamps the activity time. Every
+// write to a game must go through this so lastActive stays fresh.
+export const updateGame = (gameId, updates) =>
+  update(ref(database, `games/${gameId}`), {
+    lastActive: new Date().toISOString(),
+    ...updates,
+  });

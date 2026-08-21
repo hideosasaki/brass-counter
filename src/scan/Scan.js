@@ -1,25 +1,19 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { ref, get } from "firebase/database";
-import { database } from "../firebaseConfig";
+import { database, updateGame } from "../firebaseConfig";
+import { LINKS } from "../boardData";
 import {
-  MERCHANTS,
-  FARM_BREWERIES,
-  LINKS,
-  LINKS_BY_ID,
-  LOCATIONS,
-  REGION_COLORS,
-} from "../boardData";
-import { scoreLinksFromIcons, linkVpFromIcons } from "../scoring";
-import { PLAYER_TOKEN_CLASSES } from "../playerDefaults";
-import DonateLink from "../DonateLink";
+  CLASS_HEX,
+  LinkName,
+  linkLabel,
+  sessionClassesOf,
+  playerLabelOf,
+} from "../linkDisplay";
+import { linksFromAssignments } from "../linkScoreData";
 import { detectedPoint, CANONICAL_SIZE, DETECT_MIN_FRAC } from "./classifier";
 import { ensureEngine, scanPhoto, ScanError, CLOSE_PAIRS } from "./pipeline";
 import "bootstrap/dist/css/bootstrap.min.css";
-
-const CLASS_HEX = Object.fromEntries(
-  Object.entries(PLAYER_TOKEN_CLASSES).map(([hex, cls]) => [cls, hex])
-);
 
 const STAGES = [
   ["load", "Loading recognition engine"],
@@ -29,45 +23,6 @@ const STAGES = [
 // The pipeline reports five stages; the last four pass too quickly to be
 // worth separate rows.
 const STAGE_ALIAS = { side: "detect", classify: "warp" };
-
-function linkLabel(linkId) {
-  const locs = LINKS_BY_ID[linkId].locations.filter((l) => !FARM_BREWERIES[l]);
-  return locs.map((l) => LOCATIONS[l].name).join(" – ");
-}
-
-// City names as they appear on the board: uppercase on their region-colored
-// name banner, so they are easy to find on the physical board.
-function LocationName({ id }) {
-  const { bg, fg } = REGION_COLORS[LOCATIONS[id].region];
-  return (
-    <span
-      className="d-inline-block rounded px-2 me-1 mb-1"
-      style={{
-        backgroundColor: bg,
-        color: fg,
-        textTransform: "uppercase",
-        fontSize: "0.85em",
-        letterSpacing: "0.03em",
-      }}
-    >
-      {LOCATIONS[id].name}
-    </span>
-  );
-}
-
-function LinkName({ linkId }) {
-  const locs = LINKS_BY_ID[linkId].locations.filter((l) => !FARM_BREWERIES[l]);
-  return (
-    <span>
-      {locs.map((l, i) => (
-        <React.Fragment key={l}>
-          {i > 0 && <span className="me-1">–</span>}
-          <LocationName id={l} />
-        </React.Fragment>
-      ))}
-    </span>
-  );
-}
 
 function patchUrl(canvas, linkId, result) {
   const [nx, ny] = detectedPoint(linkId, result);
@@ -87,14 +42,13 @@ function Scan() {
   const [players, setPlayers] = useState(null);
   // No default era: a silently wrong preselection would score the wrong links.
   const [era, setEra] = useState(null);
-  const [phase, setPhase] = useState("setup"); // setup/processing/review/map/icons/result/error
+  const [phase, setPhase] = useState("setup"); // setup/processing/review/map/error
   const [stage, setStage] = useState("load");
   const [error, setError] = useState(null);
   const [scan, setScan] = useState(null); // {canvas, side, links}
   const [assignments, setAssignments] = useState({}); // linkId -> class|null
   const [reviewIndex, setReviewIndex] = useState(0);
   const [editingLink, setEditingLink] = useState(null); // from map view
-  const [icons, setIcons] = useState({});
   const [debugReport, setDebugReport] = useState(null);
   const fileInput = useRef(null);
   const libraryInput = useRef(null);
@@ -128,15 +82,8 @@ function Scan() {
     return () => window.removeEventListener("popstate", onPop);
   }, []);
 
-  const sessionClasses = useMemo(
-    () => (players || []).map((p) => PLAYER_TOKEN_CLASSES[p.color]).filter(Boolean),
-    [players]
-  );
-
-  const playerLabel = (cls) => {
-    const i = (players || []).findIndex((p) => PLAYER_TOKEN_CLASSES[p.color] === cls);
-    return i >= 0 ? `#${i + 1}` : cls;
-  };
+  const sessionClasses = useMemo(() => sessionClassesOf(players), [players]);
+  const playerLabel = (cls) => playerLabelOf(players, cls);
 
   const linkResultById = useMemo(
     () => Object.fromEntries((scan ? scan.links : []).map((l) => [l.linkId, l])),
@@ -197,28 +144,17 @@ function Scan() {
     }
   };
 
-  const ownedLinks = useMemo(
-    () =>
-      Object.entries(assignments)
-        .filter(([, cls]) => cls)
-        .map(([linkId, cls]) => ({ linkId, player: cls })),
-    [assignments]
-  );
-
-  const iconLocations = useMemo(() => {
-    const set = new Set();
-    for (const { linkId } of ownedLinks) {
-      for (const loc of LINKS_BY_ID[linkId].locations) {
-        if (!MERCHANTS[loc]) set.add(loc);
-      }
-    }
-    return [...set].sort();
-  }, [ownedLinks]);
-
-  const totals = useMemo(
-    () => scoreLinksFromIcons(ownedLinks, icons),
-    [ownedLinks, icons]
-  );
+  // Publish the confirmed links (never the photo) and hand over to the shared
+  // score screen, where everyone enters icon counts together. Only the links
+  // and the share time are written: icon counts already entered by other
+  // players survive a re-scan.
+  const shareAndOpen = () => {
+    updateGame(gameId, {
+      [`linkScore/${era}/links`]: linksFromAssignments(assignments),
+      [`linkScore/${era}/at`]: new Date().toISOString(),
+    });
+    navigate(`/game/${gameId}/score/${era}`);
+  };
 
   // One row of color buttons plus Empty: everything must fit on a phone
   // screen together with the patch image, without scrolling.
@@ -455,8 +391,8 @@ function Scan() {
           })}
         </div>
         <div className="d-grid gap-2">
-          <button className="btn btn-primary btn-lg" onClick={() => goTo({ phase: "icons" })}>
-            Next
+          <button className="btn btn-success btn-lg" onClick={shareAndOpen}>
+            Share with everyone
           </button>
           <button className="btn btn-outline-secondary" onClick={() => goTo({ phase: "setup" })}>
             Rescan
@@ -519,107 +455,7 @@ function Scan() {
     );
   }
 
-  // ---- icon counts ----------------------------------------------------------
-  if (phase === "icons") {
-    return (
-      <div className="container mt-3" style={{ maxWidth: 480 }}>
-        <h5>Link icons per location</h5>
-        <p className="text-secondary">
-          Enter the total of the black hexagon link icons printed on the built
-          industry tiles in each location. Merchants always count 2.
-        </p>
-        {iconLocations.map((loc) => (
-          <div key={loc} className="card mb-2">
-            <div className="card-body d-flex justify-content-between align-items-center py-2">
-              <span><LocationName id={loc} /></span>
-              <span className="btn-group">
-                <button
-                  className="btn btn-outline-secondary"
-                  onClick={() => setIcons((ic) => ({ ...ic, [loc]: Math.max(0, (ic[loc] || 0) - 1) }))}
-                >
-                  −
-                </button>
-                <span className="btn border pe-none" style={{ minWidth: 44 }}>
-                  {icons[loc] || 0}
-                </span>
-                <button
-                  className="btn btn-secondary"
-                  onClick={() => setIcons((ic) => ({ ...ic, [loc]: Math.min(8, (ic[loc] || 0) + 1) }))}
-                >
-                  +
-                </button>
-              </span>
-            </div>
-          </div>
-        ))}
-        {iconLocations.length === 0 && (
-          <div className="alert alert-secondary">No owned links were found.</div>
-        )}
-        <div className="d-grid gap-2 mt-3">
-          <button className="btn btn-primary btn-lg" onClick={() => goTo({ phase: "result" })}>
-            Calculate
-          </button>
-          <button className="btn btn-outline-secondary" onClick={() => window.history.back()}>
-            Back
-          </button>
-        </div>
-      </div>
-    );
-  }
-
-  // ---- result ----------------------------------------------------------------
-  return (
-    <div className="container mt-3" style={{ maxWidth: 480 }}>
-      <h4>Link points</h4>
-      <table className="table align-middle">
-        <tbody>
-          {sessionClasses.map((cls) => (
-            <tr key={cls}>
-              <td style={{ width: 30 }}>
-                <span
-                  className="d-inline-block rounded"
-                  style={{ width: 18, height: 18, backgroundColor: CLASS_HEX[cls] }}
-                />
-              </td>
-              <td>{playerLabel(cls)}</td>
-              <td className="text-end fs-4 fw-bold">{totals[cls] || 0} VP</td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
-      <details className="mb-3">
-        <summary>Per-link breakdown</summary>
-        <ul className="list-group mt-2">
-          {ownedLinks.map(({ linkId, player }) => (
-            <li key={linkId} className="list-group-item d-flex justify-content-between">
-              <span>
-                <span
-                  className="d-inline-block rounded me-2"
-                  style={{ width: 12, height: 12, backgroundColor: CLASS_HEX[player] }}
-                />
-                <LinkName linkId={linkId} />
-              </span>
-              <span className="fw-bold">{linkVpFromIcons(linkId, icons)}</span>
-            </li>
-          ))}
-        </ul>
-      </details>
-      <div className="alert alert-secondary">
-        Advance the VP markers on the board and remove the scored link tiles.
-      </div>
-      <div className="d-grid gap-2">
-        <button className="btn btn-primary" onClick={() => navigate(`/game/${gameId}`)}>
-          Done
-        </button>
-        <button className="btn btn-outline-secondary" onClick={() => window.history.back()}>
-          Back
-        </button>
-      </div>
-      <div className="mt-4 mb-3">
-        <DonateLink />
-      </div>
-    </div>
-  );
+  return null;
 }
 
 export default Scan;
