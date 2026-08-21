@@ -85,7 +85,8 @@ function Scan() {
   const { gameId } = useParams();
   const navigate = useNavigate();
   const [players, setPlayers] = useState(null);
-  const [era, setEra] = useState("canal");
+  // No default era: a silently wrong preselection would score the wrong links.
+  const [era, setEra] = useState(null);
   const [phase, setPhase] = useState("setup"); // setup/processing/review/map/icons/result/error
   const [stage, setStage] = useState("load");
   const [error, setError] = useState(null);
@@ -291,10 +292,18 @@ function Scan() {
           </div>
         </div>
         <div className="d-grid gap-2">
-          <button className="btn btn-primary btn-lg" onClick={() => fileInput.current.click()}>
+          <button
+            className="btn btn-primary btn-lg"
+            disabled={!era}
+            onClick={() => fileInput.current.click()}
+          >
             Take a photo
           </button>
-          <button className="btn btn-outline-primary" onClick={() => libraryInput.current.click()}>
+          <button
+            className="btn btn-outline-primary"
+            disabled={!era}
+            onClick={() => libraryInput.current.click()}
+          >
             Choose from photos
           </button>
           <button className="btn btn-outline-secondary" onClick={() => navigate(`/game/${gameId}`)}>
