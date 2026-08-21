@@ -9,8 +9,8 @@ body {
 
 /* A surface painted with a fixed light-ish color (player-colored card
    headers) keeps its dark foreground in both themes. The .btn-close rule
-   must out-cascade Bootstrap's [data-bs-theme=dark] .btn-close inversion:
-   same specificity, but this file is bundled after bootstrap.min.css. */
+   overrides the filter that Bootstrap's dark theme uses to invert the icon
+   (higher specificity than .btn-close's own filter declaration). */
 .fixed-light-surface {
   color: #212529;
 }
