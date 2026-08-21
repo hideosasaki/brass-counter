@@ -14,7 +14,7 @@ Live at [https://brass-counter.web.app](https://brass-counter.web.app) — no ac
 
 ## Link scoring from a photo (beta)
 
-Take a photo of the board at the end of an era and the app scores every link tile for you. It recognizes the board with OpenCV.js (ORB feature matching), finds the link tiles and their player colors, and applies the rulebook's link scoring over the full Birmingham map graph. Both the day and night sides of the board are supported. Anything the classifier isn't sure about is shown for a quick manual check before the totals.
+When an era ends, tap that era on the game screen and photograph the board; the app scores every link tile for you. The rail era appears once the canal era has been scored. The scanner recognizes the board with OpenCV.js (ORB feature matching), finds the link tiles and their player colors, and applies the rulebook's link scoring over the full Birmingham map graph. Both the day and night sides of the board are supported. Anything the classifier isn't sure about is shown for a quick manual check before the totals.
 
 The whole pipeline runs in your browser. The photo is processed on your device and never uploaded anywhere.
 

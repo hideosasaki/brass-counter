@@ -13,10 +13,9 @@ import {
   playerLabelOf,
 } from "./linkDisplay";
 import { ownedLinksFromPayload } from "./linkScoreData";
+import { eraTitle } from "./eras";
 import DonateLink from "./DonateLink";
 import "bootstrap/dist/css/bootstrap.min.css";
-
-const ERA_LABELS = { canal: "🛶 Canal era", rail: "🚂 Rail era" };
 
 // The shared score screen: one live view of a scanned era result that every
 // device in the game can read AND edit, like the money counters. Link
@@ -125,7 +124,7 @@ function LinkScore() {
   if (!players || payload === undefined)
     return <div className="container mt-3">Loading...</div>;
 
-  if (!ERA_LABELS[era] || !payload) {
+  if (!payload) {
     return (
       <div className="container mt-3" style={{ maxWidth: 480 }}>
         <h4>Link points</h4>
@@ -145,7 +144,7 @@ function LinkScore() {
     <div className="container mt-3" style={{ maxWidth: 480 }}>
       <h4 className="mb-2">
         Link points{" "}
-        <small className="text-secondary fs-6">{ERA_LABELS[era]}</small>
+        <small className="text-secondary fs-6">{eraTitle(era)}</small>
       </h4>
 
       {/* Totals stay visible while icon counts are entered below. */}
@@ -242,7 +241,13 @@ function LinkScore() {
       <div className="alert alert-secondary">
         Advance the VP markers on the board and remove the scored link tiles.
       </div>
-      <div className="d-grid">
+      <div className="d-grid gap-2">
+        <button
+          className="btn btn-outline-secondary"
+          onClick={() => navigate(`/game/${gameId}/scan/${era}`)}
+        >
+          Rescan photo
+        </button>
         <button className="btn btn-primary" onClick={() => navigate(`/game/${gameId}`)}>
           Back to game
         </button>

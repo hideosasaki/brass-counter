@@ -4,6 +4,7 @@ import { database, updateGame } from "./firebaseConfig";
 import { ref, onValue } from "firebase/database";
 import { incomeLevelFromSpace, highestSpaceOfLevel } from "./income";
 import { PLAYER_COLORS, initialPlayer, playersByIndex } from "./playerDefaults";
+import { ERA_LABELS, ERAS } from "./eras";
 import DonateLink from "./DonateLink";
 import "bootstrap/dist/css/bootstrap.min.css";
 
@@ -14,7 +15,6 @@ const LOAN_INCOME_LEVEL_PENALTY = 3;
 const MIN_INCOME_LEVEL = -10;
 const UNDO_WINDOW_MS = 5000;
 const SCORE_TOAST_MS = 8000;
-const ERA_LABELS = { canal: "🛶Canal", rail: "🚂Rail" };
 const UNDO_LABELS = {
   reset: "Game reset",
   removePlayer: "Player removed",
@@ -51,7 +51,7 @@ function Game() {
         // where the node "appears" on the first snapshot, from toasting.
         const prev = prevLinkScore.current;
         if (prev !== undefined) {
-          for (const era of Object.keys(ERA_LABELS)) {
+          for (const era of ERAS) {
             const p = nextScore && nextScore[era];
             if (
               p &&
@@ -96,6 +96,10 @@ function Game() {
   if (loading) {
     return <div>Loading...</div>;
   }
+
+  // The canal era always comes first, so its result standing in the database
+  // is what makes the rail era reachable — no separate "current era" state.
+  const scoringEras = linkScore?.canal ? ERAS : ["canal"];
 
   // Update only the given fields of one player in a single multi-path write
   // so concurrent edits to other players survive.
@@ -357,28 +361,33 @@ function Game() {
           <button className="btn btn-primary" onClick={endRound}>
             End Round
           </button>
-          <button
-            className="btn btn-outline-primary"
-            onClick={() => navigate(`/game/${gameId}/scan`)}
-          >
-            Link scoring (β)
-          </button>
-          {linkScore && (
-            <div className="d-flex gap-2">
-              {Object.keys(ERA_LABELS).map(
-                (era) =>
-                  linkScore[era] && (
-                    <button
-                      key={era}
-                      className="btn btn-outline-primary flex-fill"
-                      onClick={() => navigate(`/game/${gameId}/score/${era}`)}
-                    >
-                      {ERA_LABELS[era]} link points
-                    </button>
-                  )
-              )}
+          <div>
+            <div className="small text-secondary">Link scoring (β)</div>
+            {/* Equal columns whatever the labels are, so the eras read as one
+                row of choices rather than two differently sized buttons. */}
+            <div
+              className="d-grid gap-2"
+              style={{ gridTemplateColumns: `repeat(${scoringEras.length}, 1fr)` }}
+            >
+              {scoringEras.map((era) => {
+                const scored = !!linkScore?.[era];
+                return (
+                  <button
+                    key={era}
+                    className="btn btn-outline-primary py-1"
+                    onClick={() =>
+                      navigate(`/game/${gameId}/${scored ? "score" : "scan"}/${era}`)
+                    }
+                  >
+                    <span className="d-block fw-semibold">{ERA_LABELS[era]}</span>
+                    <span className="d-block small text-body-secondary">
+                      {scored ? "View & edit" : "Scan the board"}
+                    </span>
+                  </button>
+                );
+              })}
             </div>
-          )}
+          </div>
         </div>
       </div>
       <button className="btn" onClick={resetGame}>

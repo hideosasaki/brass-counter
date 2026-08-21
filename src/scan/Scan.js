@@ -11,6 +11,7 @@ import {
   playerLabelOf,
 } from "../linkDisplay";
 import { linksFromAssignments } from "../linkScoreData";
+import { eraTitle } from "../eras";
 import { detectedPoint, CANONICAL_SIZE, DETECT_MIN_FRAC } from "./classifier";
 import { ensureEngine, scanPhoto, ScanError, CLOSE_PAIRS } from "./pipeline";
 import "bootstrap/dist/css/bootstrap.min.css";
@@ -37,11 +38,11 @@ function patchUrl(canvas, linkId, result) {
 }
 
 function Scan() {
-  const { gameId } = useParams();
+  // The era comes from the route: it is chosen on the game screen, by which
+  // era button starts this flow, so it is never silently preselected here.
+  const { gameId, era } = useParams();
   const navigate = useNavigate();
   const [players, setPlayers] = useState(null);
-  // No default era: a silently wrong preselection would score the wrong links.
-  const [era, setEra] = useState(null);
   const [phase, setPhase] = useState("setup"); // setup/processing/review/map/error
   const [stage, setStage] = useState("load");
   const [error, setError] = useState(null);
@@ -188,7 +189,10 @@ function Scan() {
   if (phase === "setup" || phase === "error") {
     return (
       <div className="container mt-3" style={{ maxWidth: 480 }}>
-        <h4>Link scoring</h4>
+        <h4>
+          Link scoring{" "}
+          <small className="text-secondary fs-6">{eraTitle(era)}</small>
+        </h4>
         {phase === "error" && (
           <div className="alert alert-warning">
             {error === "board_not_found"
@@ -196,25 +200,6 @@ function Scan() {
               : "Something went wrong. Check your connection and try again."}
           </div>
         )}
-        <div className="card mb-3">
-          <div className="card-body">
-            <div className="mb-2">Which era is ending?</div>
-            <div className="btn-group w-100" role="group">
-              <button
-                className={`btn ${era === "canal" ? "btn-primary" : "btn-outline-primary"}`}
-                onClick={() => setEra("canal")}
-              >
-                🛶Canal
-              </button>
-              <button
-                className={`btn ${era === "rail" ? "btn-primary" : "btn-outline-primary"}`}
-                onClick={() => setEra("rail")}
-              >
-                🚂Rail
-              </button>
-            </div>
-          </div>
-        </div>
         <div className="card mb-3">
           <div className="card-body">
             Photograph the whole board in one shot.
@@ -230,14 +215,12 @@ function Scan() {
         <div className="d-grid gap-2">
           <button
             className="btn btn-primary btn-lg"
-            disabled={!era}
             onClick={() => fileInput.current.click()}
           >
             Take a photo
           </button>
           <button
             className="btn btn-outline-primary"
-            disabled={!era}
             onClick={() => libraryInput.current.click()}
           >
             Choose from photos
@@ -391,7 +374,7 @@ function Scan() {
           })}
         </div>
         <div className="d-grid gap-2">
-          <button className="btn btn-success btn-lg" onClick={shareAndOpen}>
+          <button className="btn btn-primary btn-lg" onClick={shareAndOpen}>
             Share with everyone
           </button>
           <button className="btn btn-outline-secondary" onClick={() => goTo({ phase: "setup" })}>
