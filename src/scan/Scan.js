@@ -268,7 +268,7 @@ function Scan() {
                 className={`btn ${era === "canal" ? "btn-primary" : "btn-outline-primary"}`}
                 onClick={() => setEra("canal")}
               >
-                🚢Canal
+                🛶Canal
               </button>
               <button
                 className={`btn ${era === "rail" ? "btn-primary" : "btn-outline-primary"}`}
