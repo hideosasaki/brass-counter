@@ -281,10 +281,13 @@ function Scan() {
         <div className="card mb-3">
           <div className="card-body">
             Photograph the whole board in one shot.
-            <ul className="mb-0 text-secondary">
+            <ul className="mb-2 text-secondary">
               <li>Any angle works, top-down is best</li>
               <li>Good light, no hands over the board</li>
             </ul>
+            <div className="small text-body-secondary">
+              The photo is processed on your device and never uploaded.
+            </div>
           </div>
         </div>
         <div className="d-grid gap-2">

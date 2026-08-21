@@ -2,14 +2,21 @@
 
 A shared money and income tracker for the board game [Brass: Birmingham](https://boardgamegeek.com/boardgame/224517/brass-birmingham).
 
-Live at **https://brass-counter.web.app** — no account needed. Start a game, share the URL, and every phone at the table sees the same numbers in real time.
+Live at [https://brass-counter.web.app](https://brass-counter.web.app) — no account needed. Start a game, share the URL, and every phone at the table sees the same numbers in real time.
 
 ## What it does
 
 - Tracks each player's money, spent amount, and income track position
 - "End Round" collects income and re-sorts players into the next turn order (ascending spend, ties keep their order), following the game's rules
 - "Loan" pays £30 and drops the income marker three levels, clamped at -10
+- "Link scoring (β)" computes end-of-era link points from a photo of the board
 - Game state syncs across devices through Firebase Realtime Database; a game lives at its own six-character URL
+
+## Link scoring from a photo (beta)
+
+Take a photo of the board at the end of an era and the app scores every link tile for you. It recognizes the board with OpenCV.js (ORB feature matching), finds the link tiles and their player colors, and applies the rulebook's link scoring over the full Birmingham map graph. Both the day and night sides of the board are supported. Anything the classifier isn't sure about is shown for a quick manual check before the totals.
+
+The whole pipeline runs in your browser. The photo is processed on your device and never uploaded anywhere.
 
 ## Development
 
@@ -32,8 +39,12 @@ To self-host, create your own Firebase project (Realtime Database + Hosting), re
 
 ## Board data and scoring
 
-`src/boardData.js` and `src/scoring.js` contain the full Birmingham map graph (20 cities, 5 merchants, 2 farm breweries, 39 links) and an end-of-era scoring engine, cross-checked against the official rulebook. They are groundwork for a planned feature: calculating link scores from a photo of the board.
+`src/boardData.js` and `src/scoring.js` contain the full Birmingham map graph (20 cities, 5 merchants, 2 farm breweries, 39 links) and an end-of-era scoring engine, cross-checked against the official rulebook. The photo scanner in `src/scan/` builds on them.
 
-## Note
+## Support
 
-This is an unofficial fan-made tool. Brass: Birmingham is a trademark of Roxley Games; this project is not affiliated with or endorsed by them.
+Brass Counter is free and has no server costs to cover. If it made your game night easier, you can [buy me a coffee](https://ko-fi.com/hideosasaki).
+
+## License
+
+[MIT](LICENSE). This is an unofficial fan-made tool. Brass: Birmingham is a trademark of Roxley Games; this project is not affiliated with or endorsed by them.
