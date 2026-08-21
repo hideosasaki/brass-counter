@@ -3,7 +3,7 @@ import { useParams, useNavigate } from "react-router-dom";
 import { database } from "./firebaseConfig";
 import { ref, onValue, update } from "firebase/database";
 import { incomeLevelFromSpace, highestSpaceOfLevel } from "./income";
-import { PLAYER_COLORS, initialPlayer } from "./playerDefaults";
+import { PLAYER_COLORS, initialPlayer, playersByIndex } from "./playerDefaults";
 import DonateLink from "./DonateLink";
 import "bootstrap/dist/css/bootstrap.min.css";
 
@@ -12,6 +12,15 @@ const MAX_MONEY = 100;
 const LOAN_AMOUNT = 30;
 const LOAN_INCOME_LEVEL_PENALTY = 3;
 const MIN_INCOME_LEVEL = -10;
+const UNDO_WINDOW_MS = 5000;
+const UNDO_LABELS = {
+  reset: "Game reset",
+  removePlayer: "Player removed",
+  endRound: "Round ended",
+};
+
+const undoIsFresh = (undo) =>
+  undo && Date.now() - new Date(undo.at).getTime() < UNDO_WINDOW_MS;
 
 function Game() {
   const { gameId } = useParams();
@@ -19,6 +28,7 @@ function Game() {
   const [players, setPlayers] = useState([]);
   const [loading, setLoading] = useState(true);
   const [copied, setCopied] = useState(false);
+  const [undoInfo, setUndoInfo] = useState(null);
 
   useEffect(() => {
     if (!gameId) return undefined;
@@ -27,6 +37,12 @@ function Game() {
       if (snapshot.exists()) {
         const data = snapshot.val();
         setPlayers(data.players ? Object.values(data.players) : []);
+        // Keep the previous reference for an unchanged undo node, so
+        // unrelated writes (any money tap) don't re-arm the hide timer.
+        setUndoInfo((prev) => {
+          const next = undoIsFresh(data.undo) ? data.undo : null;
+          return prev?.at === next?.at ? prev : next;
+        });
         setLoading(false);
       } else {
         navigate("/");
@@ -34,6 +50,16 @@ function Game() {
     });
     return () => unsubscribe();
   }, [gameId, navigate]);
+
+  // The undo toast shows on every device at the table (the node syncs through
+  // the DB), for whatever is left of the window measured from the write time.
+  useEffect(() => {
+    if (!undoInfo) return undefined;
+    const remaining =
+      UNDO_WINDOW_MS - (Date.now() - new Date(undoInfo.at).getTime());
+    const timer = setTimeout(() => setUndoInfo(null), Math.max(remaining, 0));
+    return () => clearTimeout(timer);
+  }, [undoInfo]);
 
   if (loading) {
     return <div>Loading...</div>;
@@ -50,12 +76,21 @@ function Game() {
   };
 
   // Replace the whole player list (add/remove/reorder), keyed by index.
-  const setAllPlayers = (newPlayers) => {
+  // Destructive actions pass undoAction so every device gets a chance to
+  // restore the pre-change snapshot. At most one undo — for the latest such
+  // write — exists in the DB; any other list write clears it.
+  const setAllPlayers = (newPlayers, undoAction) => {
+    const now = new Date().toISOString();
     update(ref(database, `games/${gameId}`), {
-      lastActive: new Date().toISOString(),
-      players: Object.fromEntries(newPlayers.map((p, i) => [i, p])),
+      lastActive: now,
+      players: playersByIndex(newPlayers),
+      undo: undoAction
+        ? { action: undoAction, snapshot: playersByIndex(players), at: now }
+        : null,
     });
   };
+
+  const performUndo = () => setAllPlayers(Object.values(undoInfo.snapshot));
 
   const adjustMoney = (index, amount) => {
     const money = Math.max(players[index].money + amount, 0);
@@ -105,7 +140,7 @@ function Game() {
           0
         ),
       }));
-    setAllPlayers(nextRound);
+    setAllPlayers(nextRound, "endRound");
   };
 
   const addPlayer = () => {
@@ -117,11 +152,11 @@ function Game() {
 
   const removePlayer = (index) => {
     if (players.length <= 1) return;
-    setAllPlayers(players.filter((_, i) => i !== index));
+    setAllPlayers(players.filter((_, i) => i !== index), "removePlayer");
   };
 
   const resetGame = () => {
-    setAllPlayers(players.map((player) => initialPlayer(player.color)));
+    setAllPlayers(players.map((player) => initialPlayer(player.color)), "reset");
   };
 
   // Hand the game URL to the other players: the OS share sheet where
@@ -291,6 +326,17 @@ function Game() {
       <div className="clearfix pt-4 pb-3">
         <DonateLink />
       </div>
+      {undoInfo && (
+        <div
+          className="position-fixed bottom-0 start-50 translate-middle-x mb-3 d-flex align-items-center gap-3 px-3 py-2 rounded shadow bg-warning fixed-light-surface"
+          style={{ zIndex: 1080 }}
+        >
+          <span className="fw-bold">{UNDO_LABELS[undoInfo.action]}</span>
+          <button className="btn btn-dark" onClick={performUndo}>
+            Undo
+          </button>
+        </div>
+      )}
     </div>
   );
 }

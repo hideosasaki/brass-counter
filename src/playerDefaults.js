@@ -17,3 +17,7 @@ export const initialPlayer = (color) => ({
   spent: 0,
   incomePosition: 10,
 });
+
+// Firebase stores the player list as an object keyed by index.
+export const playersByIndex = (list) =>
+  Object.fromEntries(list.map((p, i) => [i, p]));

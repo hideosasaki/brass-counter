@@ -2,7 +2,7 @@ import React from "react";
 import { ref, set } from "firebase/database";
 import { database } from "./firebaseConfig";
 import { useNavigate } from "react-router-dom";
-import { PLAYER_COLORS, initialPlayer } from "./playerDefaults";
+import { PLAYER_COLORS, initialPlayer, playersByIndex } from "./playerDefaults";
 import "bootstrap/dist/css/bootstrap.min.css";
 
 const generateGameId = () =>
@@ -15,9 +15,7 @@ function Home() {
     const gameId = generateGameId();
     await set(ref(database, `games/${gameId}`), {
       lastActive: new Date().toISOString(),
-      players: Object.fromEntries(
-        PLAYER_COLORS.map((color, i) => [i, initialPlayer(color)])
-      ),
+      players: playersByIndex(PLAYER_COLORS.map((color) => initialPlayer(color))),
     });
     navigate(`/game/${gameId}`);
   };
