@@ -104,6 +104,19 @@ export const FARM_BREWERIES = {
 // Every location on the board, whatever its kind.
 export const LOCATIONS = { ...CITIES, ...MERCHANTS, ...FARM_BREWERIES };
 
+// Regions in the order the eye scans the board, top-left to bottom-right:
+// blue, teal, red, brown, purple name banners, then the farm breweries.
+// Used to list locations in the order someone counts them on the table.
+export const REGION_ORDER = [
+  "staffordshire",
+  "derbyshire",
+  "midlands",
+  "blackCountry",
+  "birmingham",
+  "merchant",
+  "farm",
+];
+
 // Link definitions. Kidderminster-Worcester lists three locations because
 // that single link tile is also adjacent to the southern farm brewery
 // (rulebook p.9).

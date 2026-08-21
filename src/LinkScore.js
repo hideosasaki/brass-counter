@@ -2,7 +2,7 @@ import React, { useEffect, useMemo, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { ref, onValue } from "firebase/database";
 import { database, updateGame } from "./firebaseConfig";
-import { LINKS, MERCHANTS, LINKS_BY_ID } from "./boardData";
+import { LINKS, MERCHANTS, LINKS_BY_ID, LOCATIONS, REGION_ORDER } from "./boardData";
 import { scoreLinksFromIcons, linkVpFromIcons } from "./scoring";
 import {
   CLASS_HEX,
@@ -61,7 +61,8 @@ function LinkScore() {
   const playerLabel = (cls) => playerLabelOf(players, cls);
 
   // Locations whose icon counts matter: adjacent to an owned link, merchants
-  // excluded (their 2 icons are printed on the board).
+  // excluded (their 2 icons are printed on the board). Listed in REGION_ORDER,
+  // alphabetically within a region.
   const iconLocations = useMemo(() => {
     const set = new Set();
     for (const { linkId } of ownedLinks) {
@@ -69,7 +70,11 @@ function LinkScore() {
         if (!MERCHANTS[loc]) set.add(loc);
       }
     }
-    return [...set].sort();
+    const rank = (loc) => REGION_ORDER.indexOf(LOCATIONS[loc].region);
+    return [...set].sort(
+      (a, b) =>
+        rank(a) - rank(b) || LOCATIONS[a].name.localeCompare(LOCATIONS[b].name)
+    );
   }, [ownedLinks]);
 
   // Links that can exist in this era but are not owned yet: candidates for
