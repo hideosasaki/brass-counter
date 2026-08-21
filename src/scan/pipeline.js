@@ -115,9 +115,17 @@ async function fileToImageData(file) {
     cx.drawImage(bitmap, 0, 0);
     raw = cx.getImageData(0, 0, c.width, c.height);
   }
+  // ImageData and putImageData below insist on a Uint8ClampedArray, which
+  // jpeg-js does not hand back. View the decoded bytes as one instead of
+  // copying them: on a 12MP phone photo the copy alone is ~48MB, live at the
+  // same moment as the decoded original and the canvas it is drawn into.
+  const clamped =
+    raw.data instanceof Uint8ClampedArray
+      ? raw.data
+      : new Uint8ClampedArray(raw.data.buffer, raw.data.byteOffset, raw.data.length);
   const scale = Math.min(1, MAX_PHOTO_DIM / Math.max(raw.width, raw.height));
   if (scale === 1) {
-    return { data: new Uint8ClampedArray(raw.data), width: raw.width, height: raw.height };
+    return { data: clamped, width: raw.width, height: raw.height };
   }
   // Downscale via canvases; pixel data in and out of a canvas of the same
   // color space is not color-managed, so the raw samples survive.
@@ -126,7 +134,7 @@ async function fileToImageData(file) {
   full.height = raw.height;
   full
     .getContext("2d")
-    .putImageData(new ImageData(new Uint8ClampedArray(raw.data), raw.width, raw.height), 0, 0);
+    .putImageData(new ImageData(clamped, raw.width, raw.height), 0, 0);
   const w = Math.round(raw.width * scale);
   const h = Math.round(raw.height * scale);
   const small = document.createElement("canvas");
@@ -141,85 +149,102 @@ async function fileToImageData(file) {
 // onStage(name): "load" | "detect" | "side" | "warp" | "classify"
 export async function scanPhoto(file, { era, allowed, onStage }) {
   onStage("load");
-  const [{ cv, refs }, imageData] = await Promise.all([
+  let [{ cv, refs }, imageData] = await Promise.all([
     ensureEngine(),
     fileToImageData(file),
   ]);
 
-  onStage("detect");
-  await tick();
-  const src = cv.matFromImageData(imageData); // kept alive for the warp below
-  const gray = new cv.Mat();
-  cv.cvtColor(src, gray, cv.COLOR_RGBA2GRAY);
-  const orb = new cv.ORB(ORB_FEATURES, 1.2, 12, 31, 0, 2, cv.ORB_HARRIS_SCORE, 31, 12);
-  const kp = new cv.KeyPointVector();
-  const desc = new cv.Mat();
-  orb.detectAndCompute(gray, new cv.Mat(), kp, desc);
-  gray.delete();
-  orb.delete();
-
-  onStage("side");
-  await tick();
-  const bf = new cv.BFMatcher(cv.NORM_HAMMING, false);
-  let best = null;
-  for (const side of ["day", "night"]) {
-    const ref = refs[side];
-    const knn = new cv.DMatchVectorVector();
-    bf.knnMatch(desc, ref.descMat, knn, 2);
-    const good = [];
-    for (let i = 0; i < knn.size(); i++) {
-      const pair = knn.get(i);
-      if (pair.size() >= 2 && pair.get(0).distance < RATIO * pair.get(1).distance) {
-        good.push(pair.get(0));
-      }
-    }
-    knn.delete();
-    if (good.length >= 8) {
-      const srcPts = cv.matFromArray(good.length, 1, cv.CV_32FC2,
-        good.flatMap((m) => { const p = kp.get(m.queryIdx).pt; return [p.x, p.y]; }));
-      const dstPts = cv.matFromArray(good.length, 1, cv.CV_32FC2,
-        good.flatMap((m) => [ref.pts[m.trainIdx * 2], ref.pts[m.trainIdx * 2 + 1]]));
-      const mask = new cv.Mat();
-      const H = cv.findHomography(srcPts, dstPts, cv.USAC_MAGSAC, 4.0, mask);
-      let inliers = 0;
-      for (let i = 0; i < mask.rows; i++) inliers += mask.data[i];
-      srcPts.delete(); dstPts.delete(); mask.delete();
-      if (!H.empty() && (!best || inliers > best.inliers)) {
-        if (best) best.H.delete();
-        best = { side, inliers, H };
-      } else {
-        H.delete();
-      }
-    }
+  // OpenCV objects are not garbage collected: the engine's cached reference
+  // descriptors outlive the scan and are never registered here, but anything
+  // else this function allocates is. own() keeps it until the finally, so no
+  // failure path can strand it; free() releases the big ones as soon as they
+  // are dead, because the WASM heap never shrinks and a phone has to hold the
+  // peak.
+  const owned = new Set();
+  const own = (m) => {
+    owned.add(m);
+    return m;
+  };
+  const free = (m) => {
+    owned.delete(m); // delete() is not idempotent in embind
+    m.delete();
+  };
+  try {
+    onStage("detect");
     await tick();
+    const src = own(cv.matFromImageData(imageData));
+    imageData = null; // the pixels live in the WASM heap from here on
+    const gray = own(new cv.Mat());
+    cv.cvtColor(src, gray, cv.COLOR_RGBA2GRAY);
+    const orb = own(
+      new cv.ORB(ORB_FEATURES, 1.2, 12, 31, 0, 2, cv.ORB_HARRIS_SCORE, 31, 12)
+    );
+    const kp = own(new cv.KeyPointVector());
+    const desc = own(new cv.Mat());
+    const noMask = own(new cv.Mat());
+    orb.detectAndCompute(gray, noMask, kp, desc);
+    free(gray); // ~3MB of full-resolution greyscale, read only by ORB
+    free(noMask);
+
+    onStage("side");
+    await tick();
+    const bf = own(new cv.BFMatcher(cv.NORM_HAMMING, false));
+    let best = null;
+    for (const side of ["day", "night"]) {
+      const ref = refs[side];
+      const knn = own(new cv.DMatchVectorVector());
+      bf.knnMatch(desc, ref.descMat, knn, 2);
+      const good = [];
+      for (let i = 0; i < knn.size(); i++) {
+        // get(i) hands out a heap-allocated copy of the pair, one per
+        // descriptor, so it is freed here rather than registered.
+        const pair = knn.get(i);
+        if (pair.size() >= 2 && pair.get(0).distance < RATIO * pair.get(1).distance) {
+          good.push(pair.get(0)); // DMatch comes back as a plain JS copy
+        }
+        pair.delete();
+      }
+      free(knn); // ~1MB of match data per side, all of it read by now
+      if (good.length >= 8) {
+        const srcPts = own(cv.matFromArray(good.length, 1, cv.CV_32FC2,
+          good.flatMap((m) => { const p = kp.get(m.queryIdx).pt; return [p.x, p.y]; })));
+        const dstPts = own(cv.matFromArray(good.length, 1, cv.CV_32FC2,
+          good.flatMap((m) => [ref.pts[m.trainIdx * 2], ref.pts[m.trainIdx * 2 + 1]])));
+        const mask = own(new cv.Mat());
+        const H = own(cv.findHomography(srcPts, dstPts, cv.USAC_MAGSAC, 4.0, mask));
+        let inliers = 0;
+        for (let i = 0; i < mask.rows; i++) inliers += mask.data[i];
+        if (!H.empty() && (!best || inliers > best.inliers)) {
+          best = { side, inliers, H };
+        }
+      }
+      await tick();
+    }
+    if (!best || best.inliers < MIN_INLIERS) throw new ScanError("board_not_found");
+
+    onStage("warp");
+    await tick();
+    const warped = own(new cv.Mat());
+    cv.warpPerspective(src, warped, best.H,
+      new cv.Size(CANONICAL_SIZE, CANONICAL_SIZE));
+    free(src); // 16MB of photo, read for the last time by the warp above
+    const canvas = document.createElement("canvas");
+    canvas.width = CANONICAL_SIZE;
+    canvas.height = CANONICAL_SIZE;
+    cv.imshow(canvas, warped);
+    free(warped); // another 16MB, now held by the canvas instead
+
+    onStage("classify");
+    await tick();
+    const warpedData = canvas
+      .getContext("2d")
+      .getImageData(0, 0, CANONICAL_SIZE, CANONICAL_SIZE);
+    const results = classifyAllLinks(warpedData, { era, allowed, side: best.side });
+
+    return { side: best.side, inliers: best.inliers, canvas, links: results };
+  } finally {
+    for (const m of owned) m.delete();
   }
-  kp.delete(); desc.delete(); bf.delete();
-  if (!best || best.inliers < MIN_INLIERS) {
-    if (best) best.H.delete();
-    src.delete();
-    throw new ScanError("board_not_found");
-  }
-
-  onStage("warp");
-  await tick();
-  const warped = new cv.Mat();
-  cv.warpPerspective(src, warped, best.H,
-    new cv.Size(CANONICAL_SIZE, CANONICAL_SIZE));
-  src.delete(); best.H.delete();
-  const canvas = document.createElement("canvas");
-  canvas.width = CANONICAL_SIZE;
-  canvas.height = CANONICAL_SIZE;
-  cv.imshow(canvas, warped);
-  warped.delete();
-
-  onStage("classify");
-  await tick();
-  const warpedData = canvas
-    .getContext("2d")
-    .getImageData(0, 0, CANONICAL_SIZE, CANONICAL_SIZE);
-  const results = classifyAllLinks(warpedData, { era, allowed, side: best.side });
-
-  return { side: best.side, inliers: best.inliers, canvas, links: results };
 }
 
 // Pairs of links whose sample points sit so close together that a tile on
