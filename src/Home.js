@@ -23,7 +23,7 @@ function Home() {
   };
 
   return (
-    <div className="container">
+    <div className="container min-vh-100 d-flex flex-column justify-content-center">
       <h1 className="text-center">Brass Counter</h1>
       <div className="d-grid gap-2 col-6 mx-auto">
         <button

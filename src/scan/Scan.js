@@ -12,6 +12,7 @@ import {
 } from "../boardData";
 import { scoreLinksFromIcons, linkVpFromIcons } from "../scoring";
 import { PLAYER_TOKEN_CLASSES } from "../playerDefaults";
+import DonateLink from "../DonateLink";
 import { detectedPoint, CANONICAL_SIZE, DETECT_MIN_FRAC } from "./classifier";
 import { ensureEngine, scanPhoto, ScanError, CLOSE_PAIRS } from "./pipeline";
 import "bootstrap/dist/css/bootstrap.min.css";
@@ -596,6 +597,9 @@ function Scan() {
         <button className="btn btn-outline-secondary" onClick={() => window.history.back()}>
           Back
         </button>
+      </div>
+      <div className="mt-4 mb-3">
+        <DonateLink />
       </div>
     </div>
   );

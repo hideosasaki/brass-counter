@@ -4,6 +4,7 @@ import { database } from "./firebaseConfig";
 import { ref, onValue, update } from "firebase/database";
 import { incomeLevelFromSpace, highestSpaceOfLevel } from "./income";
 import { PLAYER_COLORS, initialPlayer } from "./playerDefaults";
+import DonateLink from "./DonateLink";
 import "bootstrap/dist/css/bootstrap.min.css";
 
 const MAX_PLAYERS = 4;
@@ -287,6 +288,9 @@ function Game() {
           Add Player
         </button>
       )}
+      <div className="clearfix pt-4 pb-3">
+        <DonateLink />
+      </div>
     </div>
   );
 }
