@@ -340,7 +340,7 @@ function Scan() {
         </div>
         <div className="d-grid gap-2">
           <button className="btn btn-primary btn-lg" onClick={shareAndOpen}>
-            Share with everyone
+            Count the points
           </button>
           <button className="btn btn-outline-secondary" onClick={() => goTo({ phase: "setup" })}>
             Rescan

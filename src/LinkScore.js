@@ -167,7 +167,8 @@ function LinkScore() {
       <h6 className="mt-3">Link icons per location</h6>
       <p className="text-secondary small mb-2">
         Enter the total of the black hexagon link icons printed on the built
-        industry tiles in each location. Merchants always count 2.
+        industry tiles in each location. Players can count different locations
+        at the same time, each on their own device.
       </p>
       {iconLocations.map((loc) => (
         <div key={loc} className="card mb-2">
@@ -240,16 +241,23 @@ function LinkScore() {
         {addingLink && colorButtons(addingLink, false)}
       </details>
 
-      <div className="alert alert-secondary">
-        Advance the VP markers on the board and remove the scored link tiles.
-      </div>
-      <div className="d-grid gap-2">
+      {/* Rescanning needs the link tiles still on the board, so it is offered
+          before the instruction to clear them, not after. */}
+      <div className="d-grid mb-3">
         <button
           className="btn btn-outline-secondary"
           onClick={() => navigate(`/game/${gameId}/scan/${era}`)}
         >
           Rescan photo
         </button>
+      </div>
+      {/* The closing step: named as everyone's last action so it does not read
+          as something to do while counts are still being entered. */}
+      <div className="alert alert-secondary">
+        Once everyone has finished counting, advance each player's VP marker by
+        their total above, then remove the scored link tiles from the board.
+      </div>
+      <div className="d-grid">
         <button className="btn btn-primary" onClick={() => navigate(`/game/${gameId}`)}>
           Back to game
         </button>
