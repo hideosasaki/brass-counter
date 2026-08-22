@@ -4,7 +4,11 @@
 // links whose physical tile placement varies widely between games.
 // Calibrated against two real-game photos (canal and rail era) warped into
 // the canonical frame; classification patches cover a radius of ~0.03 (60px
-// at 2048) around each point.
+// at 2048) around each point. cannock-stafford and nuneaton-tamworth are
+// instead anchored to the centre of their printed route: their observed
+// placements sat over a hundred px off it, so their patches never saw the
+// link at all. Moving a point here means rebuilding its reference patch
+// (scripts/reference-tools/export_ref_patches.js).
 export const LINK_POSITIONS = {
   "stokeOnTrent-warrington": [0.345, 0.098],
   "leek-stokeOnTrent": [0.457, 0.084],
@@ -17,14 +21,14 @@ export const LINK_POSITIONS = {
   "burtonOnTrent-stone": [0.559, 0.303],
   "burtonOnTrent-derby": [0.727, 0.331],
   "stafford-stone": [0.319, 0.332],
-  "cannock-stafford": [0.425, 0.428],
+  "cannock-stafford": [0.47639, 0.38966],
   "burtonOnTrent-tamworth": [0.69, 0.448],
   "burtonOnTrent-cannock": [0.568, 0.407],
   "burtonOnTrent-walsall": [0.59, 0.505],
   "cannock-farmNorth": [0.375, 0.437],
   "cannock-wolverhampton": [0.413, 0.497],
   "cannock-walsall": [0.495, 0.513],
-  "nuneaton-tamworth": [0.738, 0.585],
+  "nuneaton-tamworth": [0.78054, 0.52735],
   "tamworth-walsall": [0.635, 0.563],
   "walsall-wolverhampton": [0.437, 0.532],
   "coalbrookdale-wolverhampton": [0.307, 0.531],
