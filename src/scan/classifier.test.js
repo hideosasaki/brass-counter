@@ -11,6 +11,7 @@ import {
   isGlare,
   GLARE_CORR,
   GLARE_MIN_CELLS,
+  NEUTRAL_MIN_LIFT,
   PATCH_HALF,
   CELL,
   ALIGN_MARGIN,
@@ -229,6 +230,28 @@ describe("decideLink", () => {
       side: "day",
     });
     expect(r.color).toBe(null);
+  });
+
+  // A blob with no color of its own is either a white token or the residue of
+  // print the warp left displaced, and chromaticity cannot tell those apart.
+  // Only the brightness over the surrounding board can. The measurement that
+  // sent this test here read frac 0.216 with lift -2, on a photo of a board
+  // with nothing on it.
+  test("a colorless blob is a white token only when it is bright", () => {
+    const colorless = [[150, 148, 150], [152, 150, 151]];
+    const call = (lift, allowed = ["white", "pink"]) =>
+      decideLink({ results: [{ frac: 0.216, masked: colorless, lift }], allowed, side: "day" });
+    expect(call(NEUTRAL_MIN_LIFT + 10).color).toBe("white");
+    // Dim: empty board, and answered as such rather than asked about.
+    expect(call(-2)).toMatchObject({ color: null, state: "auto" });
+    // An unmeasured lift must not pass either, or a caller that forgets it
+    // gets tiles reported on empty board.
+    expect(call(undefined).color).toBe(null);
+    // A session without white has pink within reach of plain neutral, and a
+    // colorless blob must never come back as some other player's color -
+    // brightness is a veto here, not a second opinion.
+    expect(call(-2, ["pink", "yellow"])).toMatchObject({ color: null, state: "auto" });
+    expect(call(NEUTRAL_MIN_LIFT + 10, ["pink", "yellow"]).color).toBe(null);
   });
 
   test("multiple sample points take the strongest", () => {

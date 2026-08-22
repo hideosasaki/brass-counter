@@ -367,9 +367,12 @@ function Scan() {
                 inliers: scan.inliers,
                 era,
                 allowed: sessionClasses,
-                links: scan.links.map(({ linkId, state, color, frac, dist, margin, centroid, shift }) => ({
+                links: scan.links.map(({ linkId, state, color, frac, lift, dist, margin, centroid, shift }) => ({
                   linkId, state, color,
                   frac: Number(frac.toFixed(3)),
+                  // brightness over the surrounding board; tells a white tile
+                  // from the neutral residue of misplaced print
+                  lift: frac >= DETECT_MIN_FRAC ? Math.round(lift) : undefined,
                   dist: dist !== undefined ? Number(dist.toFixed(3)) : undefined,
                   margin: margin !== undefined && margin < 1 ? Number(margin.toFixed(3)) : undefined,
                   // canonical px relative to the calibrated point (align

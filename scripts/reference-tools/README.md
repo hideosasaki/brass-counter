@@ -49,3 +49,18 @@ The round trip is: `make_mask_data.mjs` → trace in `mask_tool.html` → save
 - `fix_samples.mjs <linkId>...` — moves a link's sample point to the centre of
   its traced band and rebuilds that link's reference patches, writing
   `sample_overrides.json` for `eval_masks.mjs` to try before anything ships.
+
+## Checking for answers on empty board
+
+`evaluate.mjs` scores the ground-truth games, so it only sees links the way a
+real game presented them. Neither it nor the games cover the other half of the
+question: whether a link reports a tile where there is none.
+
+- `stress_warp.mjs [amplitude px] [wavelength px]` — takes the empty-board
+  reference as the input, pushes it through a smooth displacement field that a
+  single translation cannot undo (what a folded board leaves behind after the
+  homography), and lists every link that registers anything. All of them should
+  come back empty. 4 and 8px at 400px are around what real photos leave; 12 is
+  past it, so firing there is not by itself a defect. Run it after touching a
+  mask, a sample point, or any threshold in the classifier: it is the only
+  check that a change has not started inventing tiles, and it needs no photos.

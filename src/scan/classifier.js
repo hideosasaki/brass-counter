@@ -37,6 +37,15 @@ export const DETECT_MIN_FRAC = 0.12;
 // happens to sit in the same gap: there the comparison means "do not ask", so
 // sharing it would invert on one side every time the other side was tuned.
 export const ERA_REVIEW_MIN_FRAC = 0.2;
+// Brightness over the surrounding board, in 0-255, that a colorless detection
+// has to carry to be a token; and how close to plain neutral counts as
+// colorless. Reasoned about in decideLink. Real white tiles measured lift 16.9
+// and up and sat 0.026 from neutral at their most neutral; the palest real
+// colored tile sat 0.042 from it; empty board read 12.3 and under, and -2 on a
+// phone. Both cuts sit in those gaps.
+export const NEUTRAL_MIN_LIFT = 14;
+const NEUTRAL_UV = [1 / 3, 1 / 3]; // equal parts: no color at all
+const NEUTRAL_MAX_DIST = 0.03;
 const UNMATCHED_EMPTY_MAX_FRAC = 0.3;
 const UNMATCHED_REVIEW_MAX_DIST = 0.09;
 
@@ -157,14 +166,16 @@ export function fitGain(patchPairs) {
       }
     }
   }
-  return ratios.map((r) => {
-    if (!r.length) return 1;
-    r.sort((a, b) => a - b);
-    return r[(r.length / 2) | 0];
-  });
+  return ratios.map((r) => (r.length ? median(r) : 1));
 }
 
 const luma = ([r, g, b]) => 0.299 * r + 0.587 * g + 0.114 * b;
+
+// Median of a list of numbers, leaving the caller's array alone.
+const median = (xs) => {
+  const s = [...xs].sort((a, b) => a - b);
+  return s[(s.length / 2) | 0];
+};
 
 // Pick the sub-grid of an enlarged scan patch that best matches the
 // reference patch (zero-mean luma correlation over cell shifts), undoing the
@@ -224,9 +235,9 @@ const chroma = ([r, g, b]) => {
 function maskPatch(pc, rc, gain, inRegion) {
   const n = Math.sqrt(pc.length) | 0;
   const dys = pc.map((cell, i) => luma(cell.map((v, k) => v * gain[k])) - luma(rc[i]));
-  const sorted = [...dys].sort((a, b) => a - b);
-  const medDy = sorted[(sorted.length / 2) | 0];
+  const medDy = median(dys);
   const cells = [];
+  const quiet = [];
   let cellsInRegion = 0;
   for (let i = 0; i < pc.length; i++) {
     const gx = i % n, gy = (i / n) | 0;
@@ -241,17 +252,25 @@ function maskPatch(pc, rc, gain, inRegion) {
     const dLuma = Math.abs(dys[i] - medDy);
     if (dChroma + dLuma * 0.4 > MASK_SCORE_THRESHOLD) {
       cells.push({ px, py, c, pl: luma(c), rl: luma(rc[i]), inRegion: inside });
+    } else {
+      // Cells the diff left alone are board, so their exposure offset is the
+      // honest baseline to measure a blob's brightness against. The patch-wide
+      // median cannot serve: a tile covering much of the patch drags it up and
+      // hides its own brightness. A cell's own offset is pl - rl, so nothing
+      // needs storing per cell for this.
+      quiet.push(dys[i]);
     }
   }
-  return { cells, cellsInRegion };
+  const baseDy = cells.length && quiet.length ? median(quiet) : medDy;
+  return { cells, cellsInRegion, baseDy };
 }
 
 // Reduce a diffed cell set to the per-patch decision values. frac, the color
 // samples and the centroid all come from cells inside the decision region.
-function finishPatch(cells, cellsInRegion) {
+function finishPatch(cells, cellsInRegion, baseDy) {
   const inside = cells.filter((c) => c.inRegion);
-  let sumX = 0, sumY = 0;
-  for (const c of inside) { sumX += c.px; sumY += c.py; }
+  let sumX = 0, sumY = 0, sumLift = 0;
+  for (const c of inside) { sumX += c.px; sumY += c.py; sumLift += c.pl - c.rl; }
   // Centroid of the fired cells, relative to the patch center. Comparing
   // centroids of neighbouring patches in board coordinates tells one shared
   // blob apart from two separate tiles.
@@ -261,6 +280,8 @@ function finishPatch(cells, cellsInRegion) {
   return {
     frac: cellsInRegion ? inside.length / cellsInRegion : 0,
     masked: inside.map((c) => c.c),
+    // Brightness the fired cells carry over the board around them.
+    lift: inside.length ? sumLift / inside.length - baseDy : 0,
     centroid,
   };
 }
@@ -271,9 +292,9 @@ function finishPatch(cells, cellsInRegion) {
 // folding in the local alignment shift. Every coordinate a consumer sees
 // from here on uses that one convention.
 export function classifyAlignedPatch(pc, rc, gain, shift, inRegion) {
-  const { cells, cellsInRegion } = maskPatch(pc, rc, gain, inRegion);
+  const { cells, cellsInRegion, baseDy } = maskPatch(pc, rc, gain, inRegion);
   const comps = splitComponents(cells).filter((c) => !isGlare(c));
-  const r = finishPatch(comps.flatMap((c) => c.cells), cellsInRegion);
+  const r = finishPatch(comps.flatMap((c) => c.cells), cellsInRegion, baseDy);
   const fold = ([x, y]) => [x + shift[0], y + shift[1]];
   return {
     ...r,
@@ -369,8 +390,10 @@ function nearestProto(uv, side, allowed) {
 // camera or lighting tint measured on one color corrects the others too.
 export function decideLink({ results, allowed, side, chromaOffset = [0, 0] }) {
   const bestIndex = strongestIndex(results);
-  const { frac, masked, centroid, shift } = results[bestIndex];
+  const { frac, masked, centroid, shift, lift } = results[bestIndex];
   if (frac < DETECT_MIN_FRAC) {
+    // No lift: with nothing detected there is no blob to have measured one on,
+    // and a zero here would read as a measurement.
     return { state: "auto", color: null, frac, bestIndex, centroid, shift };
   }
   const mean = masked
@@ -379,7 +402,32 @@ export function decideLink({ results, allowed, side, chromaOffset = [0, 0] }) {
   const uvRaw = chroma(mean);
   const uv = [uvRaw[0] - chromaOffset[0], uvRaw[1] - chromaOffset[1]];
   const { best, bestD, margin } = nearestProto(uv, side, allowed);
-  const color = bestD <= PROTO_MAX_DIST ? best : null;
+  const near = bestD <= PROTO_MAX_DIST ? best : null;
+  // Some blobs have no color to be identified by. The residue of a printed
+  // line the warp left a few px off averages to plain neutral, and so does the
+  // white token: white is not really a chromaticity class, it sits 0.010 from
+  // neutral where the others are ~0.05 apart. Push the empty-board reference
+  // through a displacement field a real photo could plausibly leave and links
+  // start reporting white tiles on board that is provably empty. Neither the
+  // glare test nor the per-cell chroma share separates the two: displaced
+  // edges are anti-correlated with the art, same as a pale tile over dark art,
+  // and a white token is chromatically weak by definition.
+  //
+  // So judge those blobs on the axis that does identify white, brightness over
+  // the board around them, and only those: a colored tile's brightness runs
+  // either way depending on the art it covers, so nothing can be demanded of
+  // it. A colorless blob is a white token when the session has one and it is
+  // bright enough to be opaque, and otherwise it is nothing at all - never
+  // some other color, which is why this reads as a veto and not as a second
+  // opinion. Written so a result with no lift measured cannot pass either.
+  const colorless =
+    near === "white" ||
+    Math.hypot(uv[0] - NEUTRAL_UV[0], uv[1] - NEUTRAL_UV[1]) <= NEUTRAL_MAX_DIST;
+  const color = !colorless
+    ? near
+    : near === "white" && lift >= NEUTRAL_MIN_LIFT
+    ? "white"
+    : null;
   let state = "auto";
   if (color === null) {
     // Not any session color: glare or a foreign object. Ask only when it is
@@ -391,7 +439,10 @@ export function decideLink({ results, allowed, side, chromaOffset = [0, 0] }) {
   } else if (frac < AUTO_MIN_FRAC || bestD > AUTO_MAX_DIST || margin < AUTO_MIN_MARGIN) {
     state = "review";
   }
-  return { state, color, frac, dist: bestD, margin, bestIndex, centroid, shift, uv: uvRaw };
+  return {
+    state, color, frac, lift, dist: bestD, margin, bestIndex, centroid, shift,
+    uv: uvRaw,
+  };
 }
 
 // A link's color decision and the evidence behind it, cleared. Callers that
