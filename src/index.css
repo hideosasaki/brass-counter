@@ -18,6 +18,16 @@ body {
   filter: none;
 }
 
+/* GitHub's logo policy allows the mark in black or white, so unlike an
+   ordinary icon it must not inherit the link's color. Both values are the
+   official assets: the two files differ only in this fill. */
+.github-mark {
+  fill: #000;
+}
+[data-bs-theme="dark"] .github-mark {
+  fill: #fff;
+}
+
 code {
   font-family: source-code-pro, Menlo, Monaco, Consolas, 'Courier New',
     monospace;

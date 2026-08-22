@@ -1,6 +1,6 @@
 {
   "short_name": "Brass Counter",
-  "name": "Money Tracker for Brass Birmingham",
+  "name": "Money and link scoring for Brass: Birmingham",
   "icons": [
     {
       "src": "favicon.ico",
@@ -20,6 +20,6 @@
   ],
   "start_url": ".",
   "display": "standalone",
-  "theme_color": "#000000",
-  "background_color": "#ffffff"
+  "theme_color": "#212529",
+  "background_color": "#212529"
 }
