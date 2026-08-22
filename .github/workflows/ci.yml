@@ -1,0 +1,31 @@
+name: CI
+
+# The scanner's rules are pinned by unit tests that need no board photos, which
+# is the half of its verification that can run here. The other half lives in
+# scripts/reference-tools and scores real photos of real games; those are the
+# board artwork's copyright holder's, not ours, so they stay off the repo and
+# out of CI. See scripts/reference-tools/README.md before changing a threshold.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+# A push to an open branch supersedes the run before it; only main's history
+# is worth a result per commit.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - run: npm test -- --watchAll=false
+      - run: npm run build

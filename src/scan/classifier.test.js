@@ -1,9 +1,13 @@
 import {
+  CANONICAL_SIZE,
+  PROTOS,
   cellGrid,
   fitGain,
   classifyAlignedPatch,
   DISC_REGION,
   decideLink,
+  detectedPoint,
+  estimateChromaOffset,
   linkSamplePoints,
   parseRefBin,
   alignPatch,
@@ -261,6 +265,20 @@ describe("decideLink", () => {
     expect(call(NEUTRAL_MIN_LIFT + 10, ["pink", "yellow"]).color).toBe(null);
   });
 
+  // Something is covering this link, it is roughly the right sort of color for
+  // a token, and it is big. Whatever it is, the scanner cannot name it, and a
+  // link that large and that colored is not something to answer empty on its
+  // own. The far-off chroma of a window reflection is a different case, and
+  // stays empty however big it gets.
+  test("a large blob near no session color is worth asking about", () => {
+    const orange = [[225, 122, 104]];
+    const blue = [[90, 120, 200]];
+    const ask = decideLink({ results: [{ frac: 0.35, masked: orange }], allowed: ["red", "yellow"], side: "day" });
+    expect([ask.state, ask.color]).toEqual(["review", null]);
+    const quiet = decideLink({ results: [{ frac: 0.35, masked: blue }], allowed: ["red", "yellow"], side: "day" });
+    expect([quiet.state, quiet.color]).toEqual(["auto", null]);
+  });
+
   test("multiple sample points take the strongest", () => {
     const r = decideLink({
       results: [{ frac: 0.02, masked: [] }, { frac: 0.4, masked: yellowMasked }],
@@ -269,6 +287,77 @@ describe("decideLink", () => {
     });
     expect(r.state).toBe("auto");
     expect(r.color).toBe("yellow");
+  });
+});
+
+describe("estimateChromaOffset", () => {
+  const at = (color, [du, dv], over = {}) => ({
+    color,
+    dist: 0.01,
+    frac: 0.5,
+    uv: [PROTOS.day[color][0] + du, PROTOS.day[color][1] + dv],
+    ...over,
+  });
+
+  test("with nothing confident to measure, nothing is corrected", () => {
+    expect(estimateChromaOffset([], "day")).toEqual([0, 0]);
+    expect(estimateChromaOffset([at("yellow", [0.01, 0], { frac: 0.2 })], "day")).toEqual([0, 0]);
+  });
+
+  test("the tint is the mean deviation of the confident detections", () => {
+    const [du, dv] = estimateChromaOffset(
+      [at("yellow", [0.01, 0.004]), at("red", [0.005, 0.002])],
+      "day"
+    );
+    expect(du).toBeCloseTo(0.0075);
+    expect(dv).toBeCloseTo(0.003);
+  });
+
+  // A ghost can look chromatically perfect, so only tiles with real mass and a
+  // close match are allowed to steer the correction every other link gets.
+  test("weak or badly matched detections do not steer it", () => {
+    const steered = [
+      at("yellow", [0.01, 0]),
+      at("red", [0.2, 0.2], { frac: 0.25 }),
+      at("red", [0.2, 0.2], { dist: 0.05 }),
+      at("red", [0.2, 0.2], { uv: undefined }),
+    ];
+    expect(estimateChromaOffset(steered, "day")[0]).toBeCloseTo(0.01);
+  });
+
+  test("a wild reading cannot drag the whole scan", () => {
+    const [du, dv] = estimateChromaOffset([at("yellow", [0.4, 0.3])], "day");
+    expect(Math.hypot(du, dv)).toBeCloseTo(0.03);
+  });
+});
+
+describe("detectedPoint", () => {
+  const id = "birmingham-dudley";
+  const [nx, ny] = linkSamplePoints(id)[0];
+
+  test("a detection puts the dot on the blob, not on the calibrated point", () => {
+    const [x, y] = detectedPoint(id, { frac: 0.4, centroid: [20, -40], shift: [8, 8] });
+    expect(x).toBeCloseTo(nx + 20 / CANONICAL_SIZE);
+    expect(y).toBeCloseTo(ny - 40 / CANONICAL_SIZE);
+  });
+
+  // An empty link still moved with the photo, so its dot follows the local
+  // alignment rather than sitting where the board would be if it were flat.
+  test("with nothing detected the dot follows the alignment shift", () => {
+    const [x, y] = detectedPoint(id, { frac: 0.02, centroid: [20, -40], shift: [8, 8] });
+    expect(x).toBeCloseTo(nx + 8 / CANONICAL_SIZE);
+    expect(y).toBeCloseTo(ny + 8 / CANONICAL_SIZE);
+  });
+
+  test("with no result at all the calibrated point stands", () => {
+    expect(detectedPoint(id, null)).toEqual([nx, ny]);
+  });
+
+  test("the dot belongs to the sample point that read the tile", () => {
+    const many = "birmingham-worcester";
+    const pts = linkSamplePoints(many);
+    const [x, y] = detectedPoint(many, { frac: 0.4, centroid: [0, 0], bestIndex: 2 });
+    expect([x, y]).toEqual(pts[2]);
   });
 });
 
