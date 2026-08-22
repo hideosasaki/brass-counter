@@ -7,7 +7,12 @@
 //   cp ../../src/linkMasks.js linkMasks.mjs
 //   sed -e 's|from "../linkPositions"|from "./linkPositions.mjs"|' -e 's|from "../linkMasks"|from "./linkMasks.mjs"|' ../../src/scan/classifier.js > classifier.mjs
 //   sed -e 's|from "../boardData"|from "./boardData.mjs"|' -e 's|from "./classifier"|from "./classifier.mjs"|' ../../src/scan/pipeline.js > pipeline.mjs
-// Latest result (4 games, 156 positions): 152 auto-correct, 4 review, 0 wrong.
+// Latest result (195 positions): 192 auto-correct, 3 review, 0 wrong. That is
+// five photos of four board states: app_0682.jpg is the app's own warp of the
+// same board as warped_0682.jpg, kept in the set because the scanner's
+// residual misalignment there is what a self-warped photo cannot reproduce,
+// and warped_0682.jpg shows none of it. Counting both inflates the position
+// total, so treat 195 as coverage, not as independent evidence.
 import { readFileSync } from "fs";
 import { classifyAllLinks, setRefPatches } from "./pipeline.mjs";
 import Jimp from "./node_modules/jimp/dist/index.js";

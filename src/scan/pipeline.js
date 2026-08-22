@@ -15,7 +15,7 @@ import {
   decideLink,
   estimateChromaOffset,
   NO_COLOR,
-  DETECT_MIN_FRAC,
+  ERA_REVIEW_MIN_FRAC,
   PATCH_HALF,
   ALIGN_MARGIN,
 } from "./classifier";
@@ -300,15 +300,19 @@ export function classifyAllLinks(
       chromaOffset,
     });
     if (eraValid) return { linkId: link.id, eraValid, ...r };
-    // This link cannot exist this era. A strong detection here usually means
-    // a neighbouring link's tile drifted -> let the human place it, so keep
-    // the measurement but not the color.
+    // This link cannot exist this era. A detection with real mass behind it
+    // usually means a neighbouring link's tile drifted -> let the human place
+    // it, so keep the measurement but not the color. Below that mass it is
+    // print showing through, and nothing can be placed here anyway: asking
+    // about a stretch of board that cannot hold a tile is the worst question
+    // this scanner can put, so the answer is empty whatever decideLink made of
+    // the color it read.
     return {
       linkId: link.id,
       eraValid,
       ...r,
       ...NO_COLOR,
-      state: r.frac >= DETECT_MIN_FRAC ? "review" : r.state,
+      state: r.frac >= ERA_REVIEW_MIN_FRAC ? "review" : "auto",
     };
   });
 }

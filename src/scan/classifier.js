@@ -1,8 +1,9 @@
 // Pure classification logic for the board scanner. Works on ImageData-like
 // objects ({data, width, height} RGBA) in the canonical board frame, so it is
 // unit-testable without OpenCV or a DOM. Method and thresholds were tuned
-// against four real games (156 link positions: 152 auto-correct, 4 review,
-// 0 wrong automatic answers); see scripts/reference-tools/evaluate.mjs.
+// against five photos of four real board states (195 link positions: 192
+// auto-correct, 3 review, 0 wrong automatic answers); see
+// scripts/reference-tools/evaluate.mjs.
 import { LINK_POSITIONS } from "../linkPositions";
 import { LINK_MASKS } from "../linkMasks";
 
@@ -28,6 +29,14 @@ const AUTO_MIN_MARGIN = 0.02;
 // Real tiles measured frac >= 0.17 in ground truth; sub-0.12 detections are
 // noise (glare, print differences) and are dropped without asking.
 export const DETECT_MIN_FRAC = 0.12;
+// Mass at which a detection on a link that cannot exist this era is worth a
+// question (see classifyAllLinks). Nothing can be placed there, so the only
+// reading worth acting on is a tile so badly out of place that it reaches in
+// from next door, which covers 0.3 and up. Print showing through these links
+// measured 0.16. Deliberately its own number rather than AUTO_MIN_FRAC, which
+// happens to sit in the same gap: there the comparison means "do not ask", so
+// sharing it would invert on one side every time the other side was tuned.
+export const ERA_REVIEW_MIN_FRAC = 0.2;
 const UNMATCHED_EMPTY_MAX_FRAC = 0.3;
 const UNMATCHED_REVIEW_MAX_DIST = 0.09;
 
@@ -202,7 +211,13 @@ const chroma = ([r, g, b]) => {
 
 // Compare one photo patch against the empty-board reference patch.
 // Chroma difference dominates; luma difference is compensated by the patch
-// median so shadows and glare gradients do not fire the diff.
+// median so shadows and glare gradients do not fire the diff. That median is
+// taken over the whole patch while frac and color come from the region alone,
+// so it inherits whatever else the patch extent contains: a neighbouring
+// link's tile inside the patch shifts the baseline and can push the printed
+// art in the region over the threshold. What keeps that from happening is the
+// centring invariant on the sample points (see linkMasks.test.js), not
+// anything here.
 // The diff covers the FULL patch, not just the decision region: blobs
 // straddling the region's edge must be seen whole so component filtering can
 // judge and assign them; only cells inside the region count toward frac/color.
@@ -271,9 +286,19 @@ export function classifyAlignedPatch(pc, rc, gain, shift, inRegion) {
 // Glare (a sheen on the glossy board) desaturates a region toward neutral
 // white, which fires the chroma mask just like a white tile. The tell: the
 // board art stays visible through glare, so the photo's luma still tracks
-// the reference's, while a real tile hides the art completely. Measured on
-// four games: glare/ghost blobs correlate >= 0.7, real tiles <= 0.36.
-export const GLARE_CORR = 0.55;
+// the reference's, while a real tile hides the art completely. The same tell
+// catches the other thing that fires without a tile: a printed line the
+// homography left slightly misplaced, which shows the art displaced rather
+// than covered. Measured over five games, blobs of any consequence sit either
+// side of a wide gap - real tiles at most 0.36, glare and misplaced print from
+// 0.55 up - so the cut is the middle of that gap. Small blobs land anywhere
+// (eleven cells of a white tile reached 0.60), but they are too few cells to
+// carry a link on their own. That makes GLARE_MIN_CELLS below load-bearing:
+// with less headroom above real tiles than the old cut had, the cell floor is
+// what stops a fragment of a real tile being thrown away. Raising it does not
+// help - at 12 and above, small glare blobs survive instead and cost more
+// reviews than the fragments are worth.
+export const GLARE_CORR = 0.45;
 export const GLARE_MIN_CELLS = 8;
 
 export const isGlare = (comp) =>

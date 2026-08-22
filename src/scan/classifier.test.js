@@ -135,7 +135,7 @@ describe("splitComponents", () => {
     expect(comps).toHaveLength(1);
   });
 
-  test("glare correlates with the reference, a tile does not", () => {
+  test("art showing through is not a tile, however it shows", () => {
     // Glare: photo luma tracks the reference art's luma (brightened).
     const glare = [];
     for (let i = 0; i < GLARE_MIN_CELLS + 2; i++) {
@@ -145,6 +145,15 @@ describe("splitComponents", () => {
     expect(glareComp.corr).toBeGreaterThan(GLARE_CORR);
     expect(isGlare(glareComp)).toBe(true);
 
+    // Displaced print: the homography puts a high-contrast line a cell off, so
+    // the art is moved rather than covered. A dark line crossing pale ground,
+    // against the same profile one cell along.
+    const art = [150, 150, 140, 60, 40, 60, 140, 150, 150, 150];
+    const [movedComp] = splitComponents(
+      art.slice(1).map((pl, i) => cell(i * CELL, 0, pl, art[i]))
+    );
+    expect(isGlare(movedComp)).toBe(true);
+
     // Tile: flat photo luma over varying art.
     const tile = [];
     for (let i = 0; i < GLARE_MIN_CELLS + 2; i++) {
@@ -152,6 +161,15 @@ describe("splitComponents", () => {
     }
     const [tileComp] = splitComponents(tile);
     expect(isGlare(tileComp)).toBe(false);
+  });
+
+  // The cut is not free to move; the measured gap it has to land in is at the
+  // GLARE_CORR comment. It sat on the far edge of that gap once, which is
+  // where a misplaced rail line measured, and one link asked about an empty
+  // stretch of board on every scan.
+  test("the glare cut sits between real tiles and art showing through", () => {
+    expect(GLARE_CORR).toBeGreaterThan(0.36); // strongest real tile blob
+    expect(GLARE_CORR).toBeLessThan(0.55); // weakest blob with no tile under it
   });
 
   test("a small blob is never called glare, whatever its correlation", () => {

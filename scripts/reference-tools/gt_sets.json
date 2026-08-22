@@ -32,6 +32,14 @@
       "birmingham-nuneaton": "yellow"
     }
   },
+  "app_0682.jpg": {
+    "side": "day", "era": "canal", "allowed": ["yellow", "red", "pink", "white"],
+    "truth": {
+      "coalbrookdale-shrewsbury": "red", "coalbrookdale-wolverhampton": "red", "dudley-wolverhampton": "red",
+      "stafford-stone": "pink", "derby-nottingham": "white", "birmingham-coventry": "yellow",
+      "birmingham-dudley": "yellow", "birmingham-oxford": "yellow", "birmingham-tamworth": "yellow"
+    }
+  },
   "warped_0682.jpg": {
     "side": "day", "era": "canal", "allowed": ["yellow", "red", "pink", "white"],
     "truth": {

@@ -4,16 +4,21 @@
 // links whose physical tile placement varies widely between games.
 // Calibrated against two real-game photos (canal and rail era) warped into
 // the canonical frame; classification patches cover a radius of ~0.03 (60px
-// at 2048) around each point. cannock-stafford and nuneaton-tamworth are
-// instead anchored to the centre of their printed route: their observed
-// placements sat over a hundred px off it, so their patches never saw the
-// link at all. Moving a point here means rebuilding its reference patch
-// (scripts/reference-tools/export_ref_patches.js).
+// at 2048) around each point. cannock-stafford, nuneaton-tamworth and
+// belper-derby are instead anchored to the centre of their printed route:
+// their observed placements sat 69-100px off it, so their patches never saw
+// the link at all. A patch centred off the route is worse than useless: it
+// fills up with the neighbouring link instead, and belper-derby's took in
+// derby-nottingham's tile, whose brightness dragged the patch's exposure
+// median and lit up the printed rail line as a false detection. Moving a point
+// here means rebuilding its reference patch with
+// scripts/reference-tools/export_ref_patches.js, and its coords.json copy
+// alongside; linkPositions.test.js pins the two together.
 export const LINK_POSITIONS = {
   "stokeOnTrent-warrington": [0.345, 0.098],
   "leek-stokeOnTrent": [0.457, 0.084],
   "belper-leek": [0.64, 0.1],
-  "belper-derby": [0.79, 0.2],
+  "belper-derby": [0.76373, 0.16972],
   "derby-nottingham": [0.836, 0.222],
   "stokeOnTrent-stone": [0.378, 0.232],
   "stone-uttoxeter": [0.43, 0.257],

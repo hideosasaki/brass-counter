@@ -5,6 +5,7 @@ import {
   CENTER_R,
   DISC_REGION,
   PATCH_HALF,
+  distToPoly,
   linkSamplePoints,
   patchCellOffsets,
   patchRegion,
@@ -49,6 +50,36 @@ describe("LINK_MASKS", () => {
       });
     }
     expect(thin).toEqual([]);
+  });
+
+  // A patch is centred on its sample point, so the route it is meant to read
+  // has to be the nearest one to that point. Where it is not, the patch fills
+  // up with the neighbouring link instead, and what that does to the reading
+  // is written up at the LINK_POSITIONS header and at maskPatch.
+  //
+  // The three below are the ones left, each measured rather than waved
+  // through. birmingham-tamworth's two points, moved onto its band, hold the
+  // same score but read every one of its four observed tiles a little weaker
+  // (0.48 -> 0.45 and so on): off the band they sit closer to where tiles
+  // land. stokeOnTrent-stone and cannock-walsall carry no tile in any
+  // ground-truth photo, so moving them can only be shown not to invent one,
+  // never to find one, and the move cost a point of auto-correct. They stay
+  // until a game photo uses them. New entries are not allowed: fix the point.
+  test("the nearest route to a sample point is its own", () => {
+    const known = ["birmingham-tamworth[0]", "cannock-walsall[0]", "stokeOnTrent-stone[0]"];
+    const ids = Object.keys(LINK_MASKS);
+    const strays = [];
+    for (const id of ids) {
+      linkSamplePoints(id).forEach(([nx, ny], i) => {
+        const x = nx * CANONICAL_SIZE, y = ny * CANONICAL_SIZE;
+        const own = distToPoly(x, y, LINK_MASKS[id].pts);
+        const stolen = ids.some(
+          (other) => other !== id && distToPoly(x, y, LINK_MASKS[other].pts) < own
+        );
+        if (stolen) strays.push(`${id}[${i}]`);
+      });
+    }
+    expect(strays.sort()).toEqual(known);
   });
 
   // Two links must never score the same board cell. That is weaker than "no
