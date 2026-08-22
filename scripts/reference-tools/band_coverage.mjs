@@ -1,31 +1,29 @@
-// How much of each link's traced band its sample points actually let the
-// scanner score. Band area no patch reaches is never looked at, so a tile there
-// cannot be seen; src/linkMasks.test.js fails when a gap gets big enough to
-// hide one, and this says where the slack is before it gets that far.
+// The weakest reading each link's sample points give a tile on its band, and
+// where on the route that is. src/linkMasks.test.js fails once a band drops
+// below MIN_BAND_TILE_FRAC; this shows how much room each one has before it
+// gets there, and which end of a route is the thin one.
 import { LINK_MASKS } from "./linkMasks.mjs";
 import {
   CANONICAL_SIZE as S,
-  MAX_UNSCORED_BAND_CELLS,
-  bandCells,
-  linkSamplePoints,
-  unscoredCells,
+  MIN_BAND_TILE_FRAC,
+  samplePointsPx,
+  worstBandFrac,
 } from "./classifier.mjs";
 
 const rows = Object.entries(LINK_MASKS).map(([id, mask]) => {
-  const points = linkSamplePoints(id).map(([nx, ny]) => [nx * S, ny * S]);
-  const cells = bandCells(mask);
-  const unscored = unscoredCells(cells, points).length;
-  return { id, points: points.length, total: cells.length, unscored };
+  const points = samplePointsPx(id);
+  return { id, points: points.length, ...worstBandFrac(mask, points) };
 });
-rows.sort((a, b) => b.unscored - a.unscored);
-console.log(`unscored cells (the shipped bound is ${MAX_UNSCORED_BAND_CELLS})`);
-console.log("unscored  of band  points  link");
+rows.sort((a, b) => a.frac - b.frac);
+console.log(`worst frac a tile on the band would be read at (the floor is ${MIN_BAND_TILE_FRAC})`);
+console.log(" frac  points  weakest at        link");
 for (const r of rows) {
+  const at = r.at ? `${(r.at[0] / S).toFixed(3)},${(r.at[1] / S).toFixed(3)}` : "-";
   console.log(
-    String(r.unscored).padStart(8),
-    String(r.total).padStart(8),
+    r.frac.toFixed(3).padStart(5),
     String(r.points).padStart(7),
     " ",
+    at.padEnd(16),
     r.id
   );
 }

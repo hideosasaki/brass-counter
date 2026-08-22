@@ -4,14 +4,14 @@ import {
   CANONICAL_SIZE,
   CENTER_R,
   DISC_REGION,
-  MAX_UNSCORED_BAND_CELLS,
+  MIN_BAND_TILE_FRAC,
   PATCH_HALF,
-  bandCells,
   distToPoly,
   linkSamplePoints,
   patchCellOffsets,
   patchRegion,
-  unscoredCells,
+  samplePointsPx,
+  worstBandFrac,
 } from "./scan/classifier";
 
 describe("LINK_MASKS", () => {
@@ -85,32 +85,26 @@ describe("LINK_MASKS", () => {
     expect(strays.sort()).toEqual(known);
   });
 
-  // A patch reaches PATCH_HALF from its point, so band area further out than
-  // that from every one of a link's points is never scored, and a tile sitting
-  // there is invisible - which is how a yellow tile on birmingham-worcester's
-  // long route came back as an empty link. Long bands therefore carry several
-  // points; scripts/reference-tools/add_points.mjs places them, against the
-  // same bound this asserts.
-  //
-  // What this does not guarantee: a covered cell is not scored equally well
-  // wherever it sits. The share of a tile a patch sees still varies about
-  // threefold along a band, and the thresholds in decideLink are calibrated in
-  // that share, not in cells. Phrasing the invariant in frac would guard the
-  // decision rather than the geometry, and would take a tile-sized probe slid
-  // along each band to state.
-  test("no gap in a band is big enough to hide a tile", () => {
-    const holes = [];
+  // A patch reaches PATCH_HALF from its point, so a tile out beyond every one
+  // of a link's points is never scored and the link reads empty - which is how
+  // a yellow tile on birmingham-worcester's long route came back as an empty
+  // link. Being inside the reach is not enough either: how much of a tile a
+  // patch sees varies about threefold along a band, and a tile read weakly is
+  // one the scanner stops to ask about, which for a tile plainly visible in the
+  // photo is the failure this whole bound exists to prevent. Both are invisible
+  // in cells, so the bound is on the reading itself, at a level that answers
+  // rather than asks. Long bands carry several points to hold it;
+  // scripts/reference-tools/add_points.mjs places them against this same bound,
+  // and band_coverage.mjs shows the margin each link has before it gets here.
+  test("a tile anywhere on a band is read by some patch", () => {
+    const weak = [];
     for (const [id, mask] of Object.entries(LINK_MASKS)) {
-      const points = linkSamplePoints(id).map(([nx, ny]) => [
-        nx * CANONICAL_SIZE,
-        ny * CANONICAL_SIZE,
-      ]);
-      const unscored = unscoredCells(bandCells(mask), points).length;
-      if (unscored >= MAX_UNSCORED_BAND_CELLS) {
-        holes.push(`${id}: ${unscored} cells unscored`);
+      const { frac } = worstBandFrac(mask, samplePointsPx(id));
+      if (frac < MIN_BAND_TILE_FRAC) {
+        weak.push(`${id}: worst frac ${frac.toFixed(3)}`);
       }
     }
-    expect(holes).toEqual([]);
+    expect(weak).toEqual([]);
   });
 
   // Two links must never score the same board cell. That is weaker than "no
@@ -121,11 +115,11 @@ describe("LINK_MASKS", () => {
   test("no two regions claim the same board cell", () => {
     const cells = patchCellOffsets();
     const anchors = Object.keys(LINK_MASKS).flatMap((id) =>
-      linkSamplePoints(id).map(([nx, ny], i) => ({
+      samplePointsPx(id).map(([cx, cy], i) => ({
         id,
         i,
-        cx: Math.round(nx * CANONICAL_SIZE),
-        cy: Math.round(ny * CANONICAL_SIZE),
+        cx,
+        cy,
         inRegion: patchRegion(id, i, [0, 0]),
       }))
     );

@@ -72,6 +72,15 @@ export function linkSamplePoints(linkId) {
   return Array.isArray(pos[0]) ? pos : [pos];
 }
 
+// The same points in canonical px, rounded the way a patch centre is rounded.
+// Anything measuring where a patch sits has to round identically or it measures
+// a patch half a cell from the one the scanner uses.
+export const samplePointsPx = (linkId) =>
+  linkSamplePoints(linkId).map(([nx, ny]) => [
+    Math.round(nx * CANONICAL_SIZE),
+    Math.round(ny * CANONICAL_SIZE),
+  ]);
+
 // Distance in canonical px from a point to a polyline given in normalized
 // board coordinates. Exported for the offline mask tools, which have to agree
 // with the shipped geometry exactly.
@@ -80,10 +89,8 @@ export function distToPoly(x, y, pts) {
 }
 
 // The point on a polyline nearest to (x, y), with its distance. One definition
-// of the geometry: distToPoly asks it for the distance, and the offline tool
-// that places sample points asks it where on the route to put them, so a point
-// cannot land off the band the classifier then scores.
-export function closestOnPoly(x, y, pts) {
+// of the geometry, which distToPoly asks for the distance half of.
+function closestOnPoly(x, y, pts) {
   let best = { x: pts[0][0] * CANONICAL_SIZE, y: pts[0][1] * CANONICAL_SIZE, d: Infinity };
   for (let i = 1; i < pts.length; i++) {
     const ax = pts[i - 1][0] * CANONICAL_SIZE, ay = pts[i - 1][1] * CANONICAL_SIZE;
@@ -111,42 +118,109 @@ export function patchCellOffsets(halfSize = PATCH_HALF) {
 
 export const DISC_REGION = (px, py) => px * px + py * py <= CENTER_R * CENTER_R;
 
-// Every cell of a link's traced band, in canonical px. A patch only reaches
-// PATCH_HALF from its sample point, so band cells further than that from every
-// one of a link's points are never scored and a tile there cannot be seen;
-// unscoredCells is what says which those are. Exported because the invariant
-// test and the offline tools that place and report on points all have to mean
-// the same thing by it.
-export function bandCells(mask) {
+// Which cells of a patch centred at (cx, cy) a traced band claims, as a
+// predicate on the cell's offset from that centre. Every reading of a link is
+// taken over this set, so the shipped decision region and the region the
+// coverage bound is measured against are the same expression.
+export const maskRegion = (mask, cx, cy) => {
   const half = mask.width / 2;
-  const xs = mask.pts.map((p) => p[0] * CANONICAL_SIZE);
-  const ys = mask.pts.map((p) => p[1] * CANONICAL_SIZE);
-  const cells = [];
-  for (let y = Math.min(...ys) - half; y <= Math.max(...ys) + half; y += CELL)
-    for (let x = Math.min(...xs) - half; x <= Math.max(...xs) + half; x += CELL)
-      if (distToPoly(x, y, mask.pts) <= half) cells.push([x, y]);
-  return cells;
+  return (px, py) => distToPoly(cx + px, cy + py, mask.pts) <= half;
+};
+
+export const TILE_R = 52; // a link tile is about 104px across
+
+// Where on a band a tile can sit: its centreline, to a cell. Also the set of
+// places the offline tool is allowed to put a sample point, so a point and the
+// tile it has to read are drawn from the same geometry. Kept per mask: the
+// placer asks for the same band's centreline once per candidate point it tries,
+// and rasterising it is most of what that costs.
+const centrelines = new WeakMap();
+export function bandCentreline(mask) {
+  if (!centrelines.has(mask)) {
+    const half = mask.width / 2;
+    const xs = mask.pts.map((p) => p[0] * CANONICAL_SIZE);
+    const ys = mask.pts.map((p) => p[1] * CANONICAL_SIZE);
+    const cells = [];
+    for (let y = Math.min(...ys) - half; y <= Math.max(...ys) + half; y += CELL)
+      for (let x = Math.min(...xs) - half; x <= Math.max(...xs) + half; x += CELL)
+        if (distToPoly(x, y, mask.pts) <= CELL) cells.push([x, y]);
+    centrelines.set(mask, cells);
+  }
+  return centrelines.get(mask);
 }
 
-// Which of those cells no patch centred on `points` (canonical px) covers.
-export const unscoredCells = (cells, points) =>
-  cells.filter(
-    ([x, y]) =>
-      !points.some(
-        ([cx, cy]) => Math.abs(x - cx) <= PATCH_HALF && Math.abs(y - cy) <= PATCH_HALF
-      )
-  );
+// The share of a patch's decision region a tile centred at (tx, ty) covers,
+// given that region's cells as offsets from the patch centre. The tile is
+// treated as a disc of TILE_R rather than the rounded rectangle at an arbitrary
+// angle it really is; frac_efficiency.mjs measures real tiles against this same
+// disc, so what the approximation costs is already inside the ratios that
+// MIN_BAND_TILE_FRAC is derived from.
+export function tileFrac(cells, [cx, cy], [tx, ty]) {
+  if (!cells.length) return 0;
+  let hit = 0;
+  for (const [ox, oy] of cells) {
+    const dx = cx + ox - tx, dy = cy + oy - ty;
+    if (dx * dx + dy * dy <= TILE_R * TILE_R) hit++;
+  }
+  return hit / cells.length;
+}
 
-// How much band a link may leave unscored. A tile covers about 100 cells, so a
-// smaller gap still leaves most of a tile inside a patch and the link is read
-// anyway. This is a cost bound rather than a hazard bound: closing the last
-// small gaps is not free, because each added point is one more place an empty
-// link can fire, and points added for gaps of 12 and 36 cells were measured to
-// cost a wrong answer on a game photo and a tile invented on empty board. Any
-// value from 39 to 48 leaves the shipped points exactly as they are - below
-// that the cheap points come back, above it a real gap stops being closed - so
-// this sits in the middle of that window rather than on its edge.
-export const MAX_UNSCORED_BAND_CELLS = 45;
+// The weakest reading a tile on this band can get: for every place on the route
+// a tile could sit, the best frac any one of the link's patches would give it,
+// reported at the worst such place. A patch only reaches PATCH_HALF from its
+// point, so a tile out beyond every point scores nothing at all and the link
+// reads empty, which is how a yellow tile on birmingham-worcester's long route
+// came back as an empty link.
+//
+// In frac rather than in covered band cells, because frac is what decideLink
+// compares against. The two are not interchangeable: the share of a patch a
+// tile fills varies about threefold along a band even where every cell of it is
+// covered, so points can close every gap and still leave a real tile reading
+// under DETECT_MIN_FRAC. Only tile positions on the centreline are probed,
+// since that is where a tile sits.
+export function worstBandFrac(mask, points) {
+  const offsets = patchCellOffsets();
+  const patches = points
+    .map((p) => {
+      const inRegion = maskRegion(mask, ...p);
+      return { p, cells: offsets.filter(([ox, oy]) => inRegion(ox, oy)) };
+    })
+    .filter((patch) => patch.cells.length);
+  let worst = null;
+  for (const at of bandCentreline(mask)) {
+    let best = 0;
+    for (const { p, cells } of patches) best = Math.max(best, tileFrac(cells, p, at));
+    if (!worst || best < worst.frac) worst = { frac: best, at };
+  }
+  // No centreline to probe means nothing about this band is scored, so the
+  // weakest reading on it is nothing.
+  return worst || { frac: 0, at: null };
+}
+
+// The floor every band has to clear. What it buys is an automatic answer, not
+// merely a detection: a tile a person can see at a glance must not come back as
+// a question because of where along its route it happens to sit. Asking about
+// the obvious is the expensive failure here. Misreading a tile dropped
+// carelessly across the edge of its route is not - that one is understood by
+// whoever placed it, and it is not worth spending questions to avoid.
+//
+// Real tiles score less than their geometry allows: the printed art under them,
+// the tile's own shadow and the alignment residual all cost cells. Over the 103
+// ground-truth tiles the weakest kept 0.46 of its ideal frac and the tenth
+// percentile kept 0.63 (scripts/reference-tools/frac_efficiency.mjs; the mean is
+// 0.81). Answering without asking needs AUTO_MIN_FRAC, so 0.32 covers a tile at
+// that tenth percentile and covering the weakest tile ever measured would take
+// 0.43. The high end is not reachable at any price: birmingham-worcester tops
+// out at 0.42 and burtonOnTrent-stone at 0.39 with ten points each, because a
+// patch only ever sees so much of a band that runs past it. So this sits just
+// above the tenth-percentile figure, where nine tiles in ten are answered
+// wherever they sit and the tenth is asked about rather than missed.
+//
+// 0.32 and 0.33 place the same points; from 0.34 the count climbs and at 0.35
+// cannock-farmNorth cannot be brought up at all, its band being short enough
+// that one patch already spans what there is of it. Sitting at the top of that
+// flat range costs nothing and leaves the guarantee its margin.
+export const MIN_BAND_TILE_FRAC = 0.33;
 
 // Which cells of a patch count toward the decision, as a predicate on the
 // cell's offset from the patch centre. The mask is anchored to the board
@@ -156,11 +230,8 @@ export const MAX_UNSCORED_BAND_CELLS = 45;
 export function patchRegion(linkId, sampleIndex, shift) {
   const mask = LINK_MASKS[linkId];
   if (!mask) return DISC_REGION;
-  const [nx, ny] = linkSamplePoints(linkId)[sampleIndex];
-  const cx = Math.round(nx * CANONICAL_SIZE) + shift[0];
-  const cy = Math.round(ny * CANONICAL_SIZE) + shift[1];
-  const half = mask.width / 2;
-  return (px, py) => distToPoly(cx + px, cy + py, mask.pts) <= half;
+  const [cx, cy] = samplePointsPx(linkId)[sampleIndex];
+  return maskRegion(mask, cx + shift[0], cy + shift[1]);
 }
 
 // Index of the sample point with the strongest detection.

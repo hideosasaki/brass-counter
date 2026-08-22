@@ -58,15 +58,23 @@ The round trip is: `make_mask_data.mjs` → trace in `mask_tool.html` → save
   its traced band and rebuilds that link's reference patches, writing
   `sample_overrides.json` for `eval_masks.mjs` to try before anything ships.
 
-- `band_coverage.mjs` — prints, per link, how much of its traced band no patch
-  reaches, so a tile there could not be seen. `src/linkMasks.test.js` fails once
-  a gap is big enough to hide one; this shows where the slack is beforehand.
+- `band_coverage.mjs` — prints, per link, the weakest frac its sample points
+  would give a tile anywhere on its band, and where on the route that is.
+  `src/linkMasks.test.js` fails once a band drops below `MIN_BAND_TILE_FRAC`;
+  this shows how much room each one has left.
+- `frac_efficiency.mjs` — compares every ground-truth tile's measured frac
+  against what its position geometrically allowed, which is where
+  `MIN_BAND_TILE_FRAC` comes from: real tiles keep 0.81 of their ideal on
+  average, 0.63 at the tenth percentile and 0.46 at worst, and the floor sits
+  just above `AUTO_MIN_FRAC` over that tenth percentile. Rerun it when
+  ground-truth photos are added.
 - `add_points.mjs <out.json> [max points per link]` — writes a candidate
-  `coords.json` with extra sample points on the links whose band has such a gap.
-  Points go on the band centreline, furthest-first so a long band fills from its
-  ends. Score the result with `evaluate.mjs` and `stress_warp.mjs` before
-  shipping it: every added point is also one more place an empty link can fire.
-  Run against the shipped `coords.json` it should be a no-op.
+  `coords.json` with extra sample points on the links whose band reads below
+  that floor. Points go on the band centreline, each one placed where it lifts
+  the weakest reading most, and any a later point renders idle is dropped again.
+  Score the result with `evaluate.mjs` and `stress_warp.mjs` before shipping it:
+  every added point is also one more place an empty link can fire. Run against
+  the shipped `coords.json` it should be a no-op.
 
 ## Checking for answers on empty board
 
