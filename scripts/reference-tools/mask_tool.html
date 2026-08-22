@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="ja">
+<html lang="en">
 <head>
 <meta charset="utf-8">
 <title>Link mask tracer</title>
@@ -45,7 +45,7 @@
 <div id="stage">
   <canvas id="cv"></canvas>
   <div id="drop">
-    <div><b>reference_base.jpg</b> をここにドラッグ&ドロップ<br>
+    <div>Drop <b>reference_base.jpg</b> here<br>
     <span style="font-size:12px">(tmp/reference_base.jpg)</span></div>
   </div>
 </div>
@@ -53,22 +53,24 @@
   <h1>Link mask tracer <span id="count" style="float:right;color:#7ee0a8;font-weight:400"></span></h1>
   <div id="list"></div>
   <div class="panel">
-    <label>幅 <input id="w" type="range" min="30" max="200" step="5"><span id="wv"></span>px</label>
+    <label>Width <input id="w" type="range" min="30" max="200" step="5"><span id="wv"></span>px</label>
     <div class="btns">
-      <button id="undo">1点戻す</button>
-      <button id="clear">このリンクを消す</button>
+      <button id="undo">Undo point</button>
+      <button id="clear">Clear this link</button>
       <button id="prev">◀</button>
       <button id="next">▶</button>
     </div>
     <div class="btns">
-      <button id="save">link_masks.json を保存</button>
+      <button id="save">Save link_masks.json</button>
     </div>
     <textarea id="out" readonly></textarea>
     <div class="hint">
-      左クリックで路線に沿って点を追加。<kbd>ホイール</kbd>拡大縮小、<kbd>中ドラッグ</kbd>または
-      <kbd>Shift+ドラッグ</kbd>で移動、<kbd>Backspace</kbd>で1点戻す、<kbd>[</kbd><kbd>]</kbd>でリンク送り。<br>
-      赤い円が現在の半径60の判定範囲、赤い十字が較正済みサンプル点。タイルが乗りうる帯だけを覆い、
-      隣の路線が入らない幅にする。
+      Left click to add points along the printed route. <kbd>Wheel</kbd> zooms,
+      <kbd>middle drag</kbd> or <kbd>Shift+drag</kbd> pans, <kbd>Backspace</kbd>
+      drops the last point, <kbd>[</kbd><kbd>]</kbd> step between links.<br>
+      The red circle is the current radius-60 region and the red cross is
+      the calibrated sample point. Cover only the band a tile can sit on, and
+      keep the width narrow enough that the neighbouring route stays out.
     </div>
   </div>
 </aside>
