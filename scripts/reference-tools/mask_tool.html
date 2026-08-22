@@ -1,0 +1,269 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<title>Link mask tracer</title>
+<style>
+  :root { color-scheme: dark; }
+  * { box-sizing: border-box; }
+  body { margin: 0; height: 100vh; display: flex; font: 13px/1.5 ui-sans-serif, system-ui, sans-serif;
+         background: #14161a; color: #e6e8ec; }
+  #stage { flex: 1; position: relative; overflow: hidden; }
+  canvas { display: block; cursor: crosshair; }
+  #drop { position: absolute; inset: 0; display: grid; place-items: center; text-align: center;
+          background: #14161a; font-size: 15px; color: #9aa3af; }
+  #drop.hidden { display: none; }
+  #drop b { color: #e6e8ec; }
+  aside { width: 300px; border-left: 1px solid #2a2f38; display: flex; flex-direction: column;
+          background: #191c22; }
+  aside h1 { font-size: 13px; margin: 0; padding: 12px 14px; border-bottom: 1px solid #2a2f38;
+             font-weight: 600; letter-spacing: .02em; }
+  #list { flex: 1; overflow-y: auto; }
+  .row { padding: 6px 14px; cursor: pointer; display: flex; gap: 8px; align-items: baseline;
+         border-bottom: 1px solid #21252c; }
+  .row:hover { background: #21252c; }
+  .row.sel { background: #2d3a52; }
+  .row .id { flex: 1; font-family: ui-monospace, monospace; font-size: 11.5px; }
+  .row .era { font-size: 10px; color: #7b8494; }
+  .row.done .id { color: #7ee0a8; }
+  .row.prio .id::before { content: "★ "; color: #e0b34a; }
+  .panel { border-top: 1px solid #2a2f38; padding: 12px 14px; display: flex; flex-direction: column; gap: 10px; }
+  .panel label { display: flex; align-items: center; gap: 8px; font-size: 12px; }
+  input[type=range] { flex: 1; }
+  button { background: #2a3140; color: #e6e8ec; border: 1px solid #3a4354; border-radius: 5px;
+           padding: 6px 10px; font: inherit; cursor: pointer; }
+  button:hover { background: #343d4f; }
+  button:focus-visible { outline: 2px solid #6ea8fe; outline-offset: 1px; }
+  .btns { display: flex; gap: 6px; flex-wrap: wrap; }
+  textarea { width: 100%; height: 90px; background: #0f1115; color: #9aa3af; border: 1px solid #2a2f38;
+             border-radius: 5px; font: 11px ui-monospace, monospace; padding: 6px; resize: vertical; }
+  .hint { font-size: 11px; color: #7b8494; line-height: 1.6; }
+  kbd { background: #2a3140; border: 1px solid #3a4354; border-radius: 3px; padding: 0 4px; font-size: 10px; }
+</style>
+</head>
+<body>
+<div id="stage">
+  <canvas id="cv"></canvas>
+  <div id="drop">
+    <div><b>reference_base.jpg</b> をここにドラッグ&ドロップ<br>
+    <span style="font-size:12px">(tmp/reference_base.jpg)</span></div>
+  </div>
+</div>
+<aside>
+  <h1>Link mask tracer <span id="count" style="float:right;color:#7ee0a8;font-weight:400"></span></h1>
+  <div id="list"></div>
+  <div class="panel">
+    <label>幅 <input id="w" type="range" min="30" max="200" step="5"><span id="wv"></span>px</label>
+    <div class="btns">
+      <button id="undo">1点戻す</button>
+      <button id="clear">このリンクを消す</button>
+      <button id="prev">◀</button>
+      <button id="next">▶</button>
+    </div>
+    <div class="btns">
+      <button id="save">link_masks.json を保存</button>
+    </div>
+    <textarea id="out" readonly></textarea>
+    <div class="hint">
+      左クリックで路線に沿って点を追加。<kbd>ホイール</kbd>拡大縮小、<kbd>中ドラッグ</kbd>または
+      <kbd>Shift+ドラッグ</kbd>で移動、<kbd>Backspace</kbd>で1点戻す、<kbd>[</kbd><kbd>]</kbd>でリンク送り。<br>
+      赤い円が現在の半径60の判定範囲、赤い十字が較正済みサンプル点。タイルが乗りうる帯だけを覆い、
+      隣の路線が入らない幅にする。
+    </div>
+  </div>
+</aside>
+<script src="mask_tool_data.js"></script>
+<script>
+const W = 2048;                       // canonical board size; world units == canonical px
+const { links, existing } = window.MASK_DATA;
+// The browser keeps its own copy so a crash or an accidental close costs
+// nothing; link_masks.json stays the file everything else reads.
+const LS = "brass-mask-tracer";
+const readLS = (k, d) => { try { return JSON.parse(localStorage.getItem(LS + k)) || d; } catch { return d; } };
+const writeLS = (k, v) => { try { localStorage.setItem(LS + k, typeof v === "string" ? v : JSON.stringify(v)); } catch {} };
+const masks = Object.assign({}, existing, readLS(":masks", {}));
+let cur = 0, img = null;
+let zoom = 0.42, ox = 0, oy = 0;      // screen = (world - o) * zoom
+
+const cv = document.getElementById("cv"), ctx = cv.getContext("2d");
+const stage = document.getElementById("stage");
+const listEl = document.getElementById("list");
+const wEl = document.getElementById("w"), wvEl = document.getElementById("wv");
+const outEl = document.getElementById("out"), countEl = document.getElementById("count");
+
+const curId = () => links[cur].id;
+const DEFAULT_WIDTH = 60; // plateau of the width sweep on the ground-truth games
+const curMask = () => masks[curId()] || (masks[curId()] = { pts: [], width: DEFAULT_WIDTH });
+
+function resize() {
+  cv.width = stage.clientWidth; cv.height = stage.clientHeight; draw();
+}
+addEventListener("resize", resize);
+
+// --- rendering -------------------------------------------------------------
+const toScreen = (x, y) => [(x - ox) * zoom, (y - oy) * zoom];
+
+function strokePoly(pts, width, style, dash) {
+  if (!pts.length) return;
+  ctx.save();
+  ctx.setLineDash(dash || []);
+  ctx.strokeStyle = style;
+  ctx.lineWidth = Math.max(1, width * zoom);
+  ctx.lineCap = "round"; ctx.lineJoin = "round";
+  ctx.beginPath();
+  pts.forEach(([nx, ny], i) => {
+    const [sx, sy] = toScreen(nx * W, ny * W);
+    i ? ctx.lineTo(sx, sy) : ctx.moveTo(sx, sy);
+  });
+  if (pts.length === 1) { const [sx, sy] = toScreen(pts[0][0] * W, pts[0][1] * W); ctx.lineTo(sx + .01, sy); }
+  ctx.stroke();
+  ctx.restore();
+}
+
+function draw() {
+  ctx.fillStyle = "#0f1115"; ctx.fillRect(0, 0, cv.width, cv.height);
+  if (!img) return;
+  const [x0, y0] = toScreen(0, 0);
+  ctx.imageSmoothingQuality = "high";
+  ctx.drawImage(img, x0, y0, W * zoom, W * zoom);
+
+  // other links' masks, faint, so neighbours stay visible while tracing
+  for (const l of links) {
+    if (l.id === curId()) continue;
+    const m = masks[l.id];
+    if (m && m.pts.length) strokePoly(m.pts, m.width, "rgba(126,224,168,.22)");
+  }
+
+  // the link being traced
+  const m = curMask();
+  strokePoly(m.pts, m.width, "rgba(126,224,168,.42)");
+  strokePoly(m.pts, 2 / zoom, "#7ee0a8");
+  ctx.fillStyle = "#7ee0a8";
+  for (const [nx, ny] of m.pts) {
+    const [sx, sy] = toScreen(nx * W, ny * W);
+    ctx.beginPath(); ctx.arc(sx, sy, 3.5, 0, 7); ctx.fill();
+  }
+
+  // what we are replacing: calibrated sample points and the R=60 disc
+  ctx.strokeStyle = "#ff5a5a"; ctx.lineWidth = 1.5;
+  for (const [nx, ny] of links[cur].pts) {
+    const [sx, sy] = toScreen(nx * W, ny * W);
+    ctx.beginPath(); ctx.arc(sx, sy, 60 * zoom, 0, 7); ctx.stroke();
+    ctx.beginPath();
+    ctx.moveTo(sx - 9, sy); ctx.lineTo(sx + 9, sy);
+    ctx.moveTo(sx, sy - 9); ctx.lineTo(sx, sy + 9);
+    ctx.stroke();
+  }
+}
+
+// --- link list -------------------------------------------------------------
+function renderList() {
+  listEl.innerHTML = "";
+  links.forEach((l, i) => {
+    const d = document.createElement("div");
+    d.className = "row" + (i === cur ? " sel" : "") + (l.priority ? " prio" : "") +
+      (masks[l.id] && masks[l.id].pts.length >= 2 ? " done" : "");
+    d.innerHTML = `<span class="id"></span><span class="era"></span>`;
+    d.querySelector(".id").textContent = l.id;
+    d.querySelector(".era").textContent = l.era === "both" ? "" : l.era;
+    d.onclick = () => select(i);
+    listEl.appendChild(d);
+  });
+}
+
+function select(i) {
+  cur = (i + links.length) % links.length;
+  wEl.value = curMask().width; wvEl.textContent = wEl.value;
+  // centre the view on this link's first sample point
+  const [nx, ny] = links[cur].pts[0];
+  ox = nx * W - cv.width / (2 * zoom);
+  oy = ny * W - cv.height / (2 * zoom);
+  commit();
+  listEl.children[cur].scrollIntoView({ block: "nearest" });
+}
+
+// One call after any change: redraw the list and canvas, refresh the export
+// box and the counter, and hand the browser its own copy of the work.
+function commit() {
+  renderList();
+  draw();
+  const clean = {};
+  for (const [k, v] of Object.entries(masks)) if (v.pts.length >= 2) clean[k] = v;
+  outEl.value = JSON.stringify(clean, null, 1);
+  countEl.textContent = `${Object.keys(clean).length}/${links.length}`;
+  writeLS(":masks", masks);
+  return clean;
+}
+
+// --- interaction -----------------------------------------------------------
+let panning = null;
+cv.addEventListener("mousedown", (e) => {
+  if (e.button === 1 || e.shiftKey) { panning = [e.clientX, e.clientY, ox, oy]; e.preventDefault(); return; }
+  if (e.button !== 0 || !img) return;
+  const r = cv.getBoundingClientRect();
+  const wx = (e.clientX - r.left) / zoom + ox, wy = (e.clientY - r.top) / zoom + oy;
+  curMask().pts.push([+(wx / W).toFixed(5), +(wy / W).toFixed(5)]);
+  commit();
+});
+addEventListener("mousemove", (e) => {
+  if (!panning) return;
+  ox = panning[2] - (e.clientX - panning[0]) / zoom;
+  oy = panning[3] - (e.clientY - panning[1]) / zoom;
+  draw();
+});
+addEventListener("mouseup", () => { panning = null; });
+cv.addEventListener("contextmenu", (e) => e.preventDefault());
+cv.addEventListener("wheel", (e) => {
+  e.preventDefault();
+  const r = cv.getBoundingClientRect();
+  const mx = e.clientX - r.left, my = e.clientY - r.top;
+  const wx = mx / zoom + ox, wy = my / zoom + oy;
+  zoom = Math.min(4, Math.max(0.15, zoom * Math.exp(-e.deltaY * 0.0015)));
+  ox = wx - mx / zoom; oy = wy - my / zoom;
+  draw();
+}, { passive: false });
+
+addEventListener("keydown", (e) => {
+  if (e.target.tagName === "TEXTAREA") return;
+  if (e.key === "Backspace") { e.preventDefault(); curMask().pts.pop(); commit(); }
+  else if (e.key === "[") select(cur - 1);
+  else if (e.key === "]") select(cur + 1);
+});
+
+wEl.oninput = () => { curMask().width = +wEl.value; wvEl.textContent = wEl.value; commit(); };
+document.getElementById("undo").onclick = () => { curMask().pts.pop(); commit(); };
+document.getElementById("clear").onclick = () => { curMask().pts = []; commit(); };
+document.getElementById("prev").onclick = () => select(cur - 1);
+document.getElementById("next").onclick = () => select(cur + 1);
+document.getElementById("save").onclick = () => {
+  const blob = new Blob([JSON.stringify(commit(), null, 1)], { type: "application/json" });
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob); a.download = "link_masks.json"; a.click();
+  URL.revokeObjectURL(a.href);
+};
+
+// --- image loading ---------------------------------------------------------
+function loadURL(url) {
+  const im = new Image();
+  im.onload = () => { img = im; document.getElementById("drop").classList.add("hidden"); select(0); };
+  im.src = url;
+}
+// Keep the render itself too, so reopening the page does not mean
+// hunting for reference_base.jpg again.
+function load(file) {
+  const r = new FileReader();
+  r.onload = () => { writeLS(":img", r.result); loadURL(r.result); };
+  r.readAsDataURL(file);
+}
+stage.addEventListener("dragover", (e) => e.preventDefault());
+stage.addEventListener("drop", (e) => {
+  e.preventDefault();
+  if (e.dataTransfer.files[0]) load(e.dataTransfer.files[0]);
+});
+
+resize(); commit();
+const cachedImg = localStorage.getItem(LS + ":img");
+if (cachedImg) loadURL(cachedImg);
+</script>
+</body>
+</html>

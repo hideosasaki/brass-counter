@@ -11,6 +11,7 @@ import {
   alignPatch,
   fitGain,
   classifyAlignedPatch,
+  patchRegion,
   decideLink,
   estimateChromaOffset,
   NO_COLOR,
@@ -276,7 +277,12 @@ export const CLOSE_PAIRS = (() => {
 })();
 
 // Pure of OpenCV: classify all 39 link positions on the canonical frame.
-export function classifyAllLinks(warpedData, { era, allowed, side }) {
+// regionFor is the decision-region policy; the offline harness swaps it to
+// score the old disc, or a candidate set of masks, through this same code.
+export function classifyAllLinks(
+  warpedData,
+  { era, allowed, side, regionFor = patchRegion }
+) {
   const refPatchStore = getRefPatches(side);
   const pairsById = {};
   for (const link of LINKS) {
@@ -295,8 +301,8 @@ export function classifyAllLinks(warpedData, { era, allowed, side }) {
   const gain = fitGain(Object.values(pairsById).flat());
   const patchResults = {};
   for (const link of LINKS) {
-    patchResults[link.id] = pairsById[link.id].map(({ pc, rc, shift }) =>
-      classifyAlignedPatch(pc, rc, gain, shift)
+    patchResults[link.id] = pairsById[link.id].map(({ pc, rc, shift }, i) =>
+      classifyAlignedPatch(pc, rc, gain, shift, regionFor(link.id, i, shift))
     );
   }
   // First pass without adaptation, only to estimate this scan's color tint
@@ -336,8 +342,8 @@ export function classifyAllLinks(warpedData, { era, allowed, side }) {
     const [nx, ny] = linkSamplePoints(r.linkId)[r.bestIndex || 0];
     let best = null, bestIn = 0;
     for (const comp of patchResults[r.linkId][r.bestIndex || 0].comps) {
-      const inDisc = comp.cells.filter((c) => c.inDisc).length;
-      if (inDisc > bestIn) { bestIn = inDisc; best = comp; }
+      const inside = comp.cells.filter((c) => c.inRegion).length;
+      if (inside > bestIn) { bestIn = inside; best = comp; }
     }
     if (!best) return null;
     return [

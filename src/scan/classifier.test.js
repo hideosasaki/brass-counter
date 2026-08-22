@@ -2,6 +2,7 @@ import {
   cellGrid,
   fitGain,
   classifyAlignedPatch,
+  DISC_REGION,
   decideLink,
   linkSamplePoints,
   parseRefBin,
@@ -92,7 +93,7 @@ describe("classifyAlignedPatch", () => {
   test("an empty patch carries the alignment shift as its centroid", () => {
     const pc = cellGrid(makePatchImage(SIZE, GRAY), PATCH_HALF, PATCH_HALF);
     const rc = cellGrid(makePatchImage(SIZE, GRAY), PATCH_HALF, PATCH_HALF);
-    const r = classifyAlignedPatch(pc, rc, [1, 1, 1], [16, -8]);
+    const r = classifyAlignedPatch(pc, rc, [1, 1, 1], [16, -8], DISC_REGION);
     expect(r.frac).toBeLessThan(0.02);
     expect(r.centroid).toEqual([16, -8]);
     expect(r.shift).toEqual([16, -8]);
@@ -104,7 +105,7 @@ describe("classifyAlignedPatch", () => {
       PATCH_HALF, PATCH_HALF
     );
     const rc = cellGrid(makePatchImage(SIZE, GRAY), PATCH_HALF, PATCH_HALF);
-    const r = classifyAlignedPatch(pc, rc, [1, 1, 1], [8, 8]);
+    const r = classifyAlignedPatch(pc, rc, [1, 1, 1], [8, 8], DISC_REGION);
     expect(r.frac).toBeGreaterThan(0.15);
     expect(r.comps.length).toBeGreaterThan(0);
     const mean = r.masked.reduce((a, c) => a.map((v, k) => v + c[k]), [0, 0, 0])
@@ -118,7 +119,7 @@ describe("classifyAlignedPatch", () => {
 
 describe("splitComponents", () => {
   const cell = (px, py, pl = 100, rl = 50) => ({
-    px, py, c: [pl, pl, pl], pl, rl, inDisc: true,
+    px, py, c: [pl, pl, pl], pl, rl, inRegion: true,
   });
 
   test("separates two disconnected blobs", () => {

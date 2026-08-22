@@ -1,0 +1,43 @@
+{
+  "warped_canal.jpg": {
+    "side": "day", "era": "canal", "allowed": ["pink", "red", "yellow"],
+    "truth": {
+      "coalbrookdale-shrewsbury": "pink", "coalbrookdale-wolverhampton": "red", "dudley-wolverhampton": "red",
+      "coalbrookdale-kidderminster": "pink", "kidderminster-worcester": "pink", "birmingham-dudley": "red",
+      "birmingham-worcester": "pink", "birmingham-walsall": "pink", "birmingham-oxford": "yellow",
+      "birmingham-coventry": "yellow", "redditch-oxford": "yellow", "birmingham-tamworth": "yellow",
+      "burtonOnTrent-tamworth": "yellow", "leek-stokeOnTrent": "red"
+    }
+  },
+  "warped_rail.jpg": {
+    "side": "night", "era": "rail", "allowed": ["pink", "white", "yellow"],
+    "truth": {
+      "derby-uttoxeter": "white", "stone-uttoxeter": "white", "stafford-stone": "white",
+      "coalbrookdale-shrewsbury": "white", "coalbrookdale-wolverhampton": "white",
+      "walsall-wolverhampton": "white", "birmingham-walsall": "white", "birmingham-dudley": "white",
+      "birmingham-coventry": "white", "birmingham-oxford": "white", "burtonOnTrent-stone": "pink",
+      "burtonOnTrent-derby": "pink", "burtonOnTrent-cannock": "pink", "burtonOnTrent-tamworth": "pink",
+      "nuneaton-tamworth": "pink", "tamworth-walsall": "pink", "birmingham-tamworth": "pink",
+      "birmingham-nuneaton": "pink", "coalbrookdale-kidderminster": "pink",
+      "kidderminster-worcester": "pink", "gloucester-worcester": "pink", "birmingham-worcester": "pink",
+      "dudley-wolverhampton": "yellow", "dudley-kidderminster": "yellow", "birmingham-redditch": "yellow",
+      "gloucester-redditch": "yellow"
+    }
+  },
+  "warped_test.jpg": {
+    "side": "day", "era": "canal", "allowed": ["red", "yellow"],
+    "truth": {
+      "coalbrookdale-shrewsbury": "red", "coalbrookdale-wolverhampton": "red", "dudley-wolverhampton": "red",
+      "birmingham-coventry": "yellow", "birmingham-dudley": "yellow", "birmingham-oxford": "yellow",
+      "birmingham-nuneaton": "yellow"
+    }
+  },
+  "warped_0682.jpg": {
+    "side": "day", "era": "canal", "allowed": ["yellow", "red", "pink", "white"],
+    "truth": {
+      "coalbrookdale-shrewsbury": "red", "coalbrookdale-wolverhampton": "red", "dudley-wolverhampton": "red",
+      "stafford-stone": "pink", "derby-nottingham": "white", "birmingham-coventry": "yellow",
+      "birmingham-dudley": "yellow", "birmingham-oxford": "yellow", "birmingham-tamworth": "yellow"
+    }
+  }
+}

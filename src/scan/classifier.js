@@ -1,14 +1,15 @@
 // Pure classification logic for the board scanner. Works on ImageData-like
 // objects ({data, width, height} RGBA) in the canonical board frame, so it is
 // unit-testable without OpenCV or a DOM. Method and thresholds were tuned
-// against four real games (156 link positions: 144 auto-correct, 12 review,
+// against four real games (156 link positions: 152 auto-correct, 4 review,
 // 0 wrong automatic answers); see scripts/reference-tools/evaluate.mjs.
 import { LINK_POSITIONS } from "../linkPositions";
+import { LINK_MASKS } from "../linkMasks";
 
 export const CANONICAL_SIZE = 2048;
 export const PATCH_HALF = 100; // patch half-size in canonical px
 export const CELL = 8; // block-average cell size
-export const CENTER_R = 60; // the tile must be near the calibrated point
+export const CENTER_R = 60; // fallback radius for links with no traced mask
 
 // Token color prototypes in chromaticity space (r/(r+g+b), g/(r+g+b)),
 // measured per board side from real photos.
@@ -33,6 +34,51 @@ const UNMATCHED_REVIEW_MAX_DIST = 0.09;
 export function linkSamplePoints(linkId) {
   const pos = LINK_POSITIONS[linkId];
   return Array.isArray(pos[0]) ? pos : [pos];
+}
+
+// Distance in canonical px from a point to a polyline given in normalized
+// board coordinates. Exported for the offline mask tools, which have to agree
+// with the shipped geometry exactly.
+export function distToPoly(x, y, pts) {
+  let best = Infinity;
+  for (let i = 1; i < pts.length; i++) {
+    const ax = pts[i - 1][0] * CANONICAL_SIZE, ay = pts[i - 1][1] * CANONICAL_SIZE;
+    const bx = pts[i][0] * CANONICAL_SIZE, by = pts[i][1] * CANONICAL_SIZE;
+    const dx = bx - ax, dy = by - ay;
+    const len2 = dx * dx + dy * dy;
+    const t = len2 ? Math.max(0, Math.min(1, ((x - ax) * dx + (y - ay) * dy) / len2)) : 0;
+    const d = Math.hypot(x - (ax + t * dx), y - (ay + t * dy));
+    if (d < best) best = d;
+  }
+  return best;
+}
+
+// Every cell offset in a patch, as [px, py] from its centre. One definition so
+// the classifier, the tests and the offline harnesses cannot disagree.
+export function patchCellOffsets(halfSize = PATCH_HALF) {
+  const n = (2 * halfSize) / CELL;
+  const out = [];
+  for (let gy = 0; gy < n; gy++)
+    for (let gx = 0; gx < n; gx++)
+      out.push([gx * CELL + CELL / 2 - halfSize, gy * CELL + CELL / 2 - halfSize]);
+  return out;
+}
+
+export const DISC_REGION = (px, py) => px * px + py * py <= CENTER_R * CENTER_R;
+
+// Which cells of a patch count toward the decision, as a predicate on the
+// cell's offset from the patch centre. The mask is anchored to the board
+// rather than to the patch, so the local alignment shift is added back: the
+// same printed band is tested however far this photo's homography drifted
+// here. A link with no traced mask falls back to the disc.
+export function patchRegion(linkId, sampleIndex, shift) {
+  const mask = LINK_MASKS[linkId];
+  if (!mask) return DISC_REGION;
+  const [nx, ny] = linkSamplePoints(linkId)[sampleIndex];
+  const cx = Math.round(nx * CANONICAL_SIZE) + shift[0];
+  const cy = Math.round(ny * CANONICAL_SIZE) + shift[1];
+  const half = mask.width / 2;
+  return (px, py) => distToPoly(cx + px, cy + py, mask.pts) <= half;
 }
 
 // Index of the sample point with the strongest detection.
@@ -156,51 +202,50 @@ const chroma = ([r, g, b]) => {
 
 // Compare one photo patch against the empty-board reference patch.
 // Chroma difference dominates; luma difference is compensated by the patch
-// median so shadows and glare gradients do not fire the mask.
-// The mask covers the FULL patch (not just the decision disc): blobs
-// straddling the disc edge must be seen whole so component filtering can
-// judge and assign them; only in-disc cells count toward frac/color.
-function maskPatch(pc, rc, gain) {
+// median so shadows and glare gradients do not fire the diff.
+// The diff covers the FULL patch, not just the decision region: blobs
+// straddling the region's edge must be seen whole so component filtering can
+// judge and assign them; only cells inside the region count toward frac/color.
+function maskPatch(pc, rc, gain, inRegion) {
   const n = Math.sqrt(pc.length) | 0;
   const dys = pc.map((cell, i) => luma(cell.map((v, k) => v * gain[k])) - luma(rc[i]));
   const sorted = [...dys].sort((a, b) => a - b);
   const medDy = sorted[(sorted.length / 2) | 0];
   const cells = [];
-  let cellsInDisc = 0;
+  let cellsInRegion = 0;
   for (let i = 0; i < pc.length; i++) {
     const gx = i % n, gy = (i / n) | 0;
     const px = gx * CELL + CELL / 2 - PATCH_HALF;
     const py = gy * CELL + CELL / 2 - PATCH_HALF;
-    const inDisc = px * px + py * py <= CENTER_R * CENTER_R;
-    if (inDisc) cellsInDisc++;
+    const inside = inRegion(px, py);
+    if (inside) cellsInRegion++;
     const c = pc[i].map((v, k) => v * gain[k]);
     const [pu, pv] = chroma(c);
     const [ru, rv] = chroma(rc[i]);
     const dChroma = Math.hypot(pu - ru, pv - rv) * 500;
     const dLuma = Math.abs(dys[i] - medDy);
     if (dChroma + dLuma * 0.4 > MASK_SCORE_THRESHOLD) {
-      cells.push({ px, py, c, pl: luma(c), rl: luma(rc[i]), inDisc });
+      cells.push({ px, py, c, pl: luma(c), rl: luma(rc[i]), inRegion: inside });
     }
   }
-  return { cells, cellsInDisc };
+  return { cells, cellsInRegion };
 }
 
-// Reduce a masked-cell set to the per-patch decision values. frac, the color
-// samples and the centroid all come from the in-disc cells only, matching
-// the thresholds tuned on disc-based masks.
-function finishPatch(cells, cellsInDisc) {
-  const inDisc = cells.filter((c) => c.inDisc);
+// Reduce a diffed cell set to the per-patch decision values. frac, the color
+// samples and the centroid all come from cells inside the decision region.
+function finishPatch(cells, cellsInRegion) {
+  const inside = cells.filter((c) => c.inRegion);
   let sumX = 0, sumY = 0;
-  for (const c of inDisc) { sumX += c.px; sumY += c.py; }
-  // Mask centroid (relative to the patch center). Comparing centroids of
-  // neighbouring patches in board coordinates tells one shared blob apart
-  // from two separate tiles.
-  const centroid = inDisc.length
-    ? [sumX / inDisc.length, sumY / inDisc.length]
+  for (const c of inside) { sumX += c.px; sumY += c.py; }
+  // Centroid of the fired cells, relative to the patch center. Comparing
+  // centroids of neighbouring patches in board coordinates tells one shared
+  // blob apart from two separate tiles.
+  const centroid = inside.length
+    ? [sumX / inside.length, sumY / inside.length]
     : [0, 0];
   return {
-    frac: cellsInDisc ? inDisc.length / cellsInDisc : 0,
-    masked: inDisc.map((c) => c.c),
+    frac: cellsInRegion ? inside.length / cellsInRegion : 0,
+    masked: inside.map((c) => c.c),
     centroid,
   };
 }
@@ -210,10 +255,10 @@ function finishPatch(cells, cellsInDisc) {
 // (and each kept component's centroid) relative to the CALIBRATED point by
 // folding in the local alignment shift. Every coordinate a consumer sees
 // from here on uses that one convention.
-export function classifyAlignedPatch(pc, rc, gain, shift) {
-  const { cells, cellsInDisc } = maskPatch(pc, rc, gain);
+export function classifyAlignedPatch(pc, rc, gain, shift, inRegion) {
+  const { cells, cellsInRegion } = maskPatch(pc, rc, gain, inRegion);
   const comps = splitComponents(cells).filter((c) => !isGlare(c));
-  const r = finishPatch(comps.flatMap((c) => c.cells), cellsInDisc);
+  const r = finishPatch(comps.flatMap((c) => c.cells), cellsInRegion);
   const fold = ([x, y]) => [x + shift[0], y + shift[1]];
   return {
     ...r,
