@@ -164,13 +164,20 @@ describe("splitComponents", () => {
     expect(isGlare(tileComp)).toBe(false);
   });
 
-  // The cut is not free to move; the measured gap it has to land in is at the
-  // GLARE_CORR comment. It sat on the far edge of that gap once, which is
-  // where a misplaced rail line measured, and one link asked about an empty
-  // stretch of board on every scan.
+  // The cut is not free to move, and the window is narrow: the numbers below
+  // are measured, and the reasoning for landing between them is at the
+  // GLARE_CORR comment. Both edges have been crossed in the field - once too
+  // high, and a link asked about empty board on every scan; once too low, and a
+  // red tile was thrown away and its link read empty.
+  //
+  // The window has also been shrinking as photos are added, from 0.19 wide to
+  // 0.08. If a photo ever closes it, the answer is not a number in the middle:
+  // it means one correlation is being asked to separate three populations at
+  // once, and displaced print - which is thin, edge-shaped, and sits on a
+  // gradient in the reference - needs a test of its own.
   test("the glare cut sits between real tiles and art showing through", () => {
-    expect(GLARE_CORR).toBeGreaterThan(0.36); // strongest real tile blob
-    expect(GLARE_CORR).toBeLessThan(0.55); // weakest blob with no tile under it
+    expect(GLARE_CORR).toBeGreaterThan(0.468); // largest blob a real tile made
+    expect(GLARE_CORR).toBeLessThan(0.548); // smallest blob with no tile under it
   });
 
   test("a small blob is never called glare, whatever its correlation", () => {

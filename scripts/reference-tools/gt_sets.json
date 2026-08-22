@@ -1,51 +1,173 @@
 {
   "warped_canal.jpg": {
-    "side": "day", "era": "canal", "allowed": ["pink", "red", "yellow"],
+    "side": "day",
+    "era": "canal",
+    "allowed": [
+      "pink",
+      "red",
+      "yellow"
+    ],
     "truth": {
-      "coalbrookdale-shrewsbury": "pink", "coalbrookdale-wolverhampton": "red", "dudley-wolverhampton": "red",
-      "coalbrookdale-kidderminster": "pink", "kidderminster-worcester": "pink", "birmingham-dudley": "red",
-      "birmingham-worcester": "pink", "birmingham-walsall": "pink", "birmingham-oxford": "yellow",
-      "birmingham-coventry": "yellow", "redditch-oxford": "yellow", "birmingham-tamworth": "yellow",
-      "burtonOnTrent-tamworth": "yellow", "leek-stokeOnTrent": "red"
+      "coalbrookdale-shrewsbury": "pink",
+      "coalbrookdale-wolverhampton": "red",
+      "dudley-wolverhampton": "red",
+      "coalbrookdale-kidderminster": "pink",
+      "kidderminster-worcester": "pink",
+      "birmingham-dudley": "red",
+      "birmingham-worcester": "pink",
+      "birmingham-walsall": "pink",
+      "birmingham-oxford": "yellow",
+      "birmingham-coventry": "yellow",
+      "redditch-oxford": "yellow",
+      "birmingham-tamworth": "yellow",
+      "burtonOnTrent-tamworth": "yellow",
+      "leek-stokeOnTrent": "red"
     }
   },
   "warped_rail.jpg": {
-    "side": "night", "era": "rail", "allowed": ["pink", "white", "yellow"],
+    "side": "night",
+    "era": "rail",
+    "allowed": [
+      "pink",
+      "white",
+      "yellow"
+    ],
     "truth": {
-      "derby-uttoxeter": "white", "stone-uttoxeter": "white", "stafford-stone": "white",
-      "coalbrookdale-shrewsbury": "white", "coalbrookdale-wolverhampton": "white",
-      "walsall-wolverhampton": "white", "birmingham-walsall": "white", "birmingham-dudley": "white",
-      "birmingham-coventry": "white", "birmingham-oxford": "white", "burtonOnTrent-stone": "pink",
-      "burtonOnTrent-derby": "pink", "burtonOnTrent-cannock": "pink", "burtonOnTrent-tamworth": "pink",
-      "nuneaton-tamworth": "pink", "tamworth-walsall": "pink", "birmingham-tamworth": "pink",
-      "birmingham-nuneaton": "pink", "coalbrookdale-kidderminster": "pink",
-      "kidderminster-worcester": "pink", "gloucester-worcester": "pink", "birmingham-worcester": "pink",
-      "dudley-wolverhampton": "yellow", "dudley-kidderminster": "yellow", "birmingham-redditch": "yellow",
+      "derby-uttoxeter": "white",
+      "stone-uttoxeter": "white",
+      "stafford-stone": "white",
+      "coalbrookdale-shrewsbury": "white",
+      "coalbrookdale-wolverhampton": "white",
+      "walsall-wolverhampton": "white",
+      "birmingham-walsall": "white",
+      "birmingham-dudley": "white",
+      "birmingham-coventry": "white",
+      "birmingham-oxford": "white",
+      "burtonOnTrent-stone": "pink",
+      "burtonOnTrent-derby": "pink",
+      "burtonOnTrent-cannock": "pink",
+      "burtonOnTrent-tamworth": "pink",
+      "nuneaton-tamworth": "pink",
+      "tamworth-walsall": "pink",
+      "birmingham-tamworth": "pink",
+      "birmingham-nuneaton": "pink",
+      "coalbrookdale-kidderminster": "pink",
+      "kidderminster-worcester": "pink",
+      "gloucester-worcester": "pink",
+      "birmingham-worcester": "pink",
+      "dudley-wolverhampton": "yellow",
+      "dudley-kidderminster": "yellow",
+      "birmingham-redditch": "yellow",
       "gloucester-redditch": "yellow"
     }
   },
   "warped_test.jpg": {
-    "side": "day", "era": "canal", "allowed": ["red", "yellow"],
+    "side": "day",
+    "era": "canal",
+    "allowed": [
+      "red",
+      "yellow"
+    ],
     "truth": {
-      "coalbrookdale-shrewsbury": "red", "coalbrookdale-wolverhampton": "red", "dudley-wolverhampton": "red",
-      "birmingham-coventry": "yellow", "birmingham-dudley": "yellow", "birmingham-oxford": "yellow",
+      "coalbrookdale-shrewsbury": "red",
+      "coalbrookdale-wolverhampton": "red",
+      "dudley-wolverhampton": "red",
+      "birmingham-coventry": "yellow",
+      "birmingham-dudley": "yellow",
+      "birmingham-oxford": "yellow",
       "birmingham-nuneaton": "yellow"
     }
   },
   "app_0682.jpg": {
-    "side": "day", "era": "canal", "allowed": ["yellow", "red", "pink", "white"],
+    "side": "day",
+    "era": "canal",
+    "allowed": [
+      "yellow",
+      "red",
+      "pink",
+      "white"
+    ],
     "truth": {
-      "coalbrookdale-shrewsbury": "red", "coalbrookdale-wolverhampton": "red", "dudley-wolverhampton": "red",
-      "stafford-stone": "pink", "derby-nottingham": "white", "birmingham-coventry": "yellow",
-      "birmingham-dudley": "yellow", "birmingham-oxford": "yellow", "birmingham-tamworth": "yellow"
+      "coalbrookdale-shrewsbury": "red",
+      "coalbrookdale-wolverhampton": "red",
+      "dudley-wolverhampton": "red",
+      "stafford-stone": "pink",
+      "derby-nottingham": "white",
+      "birmingham-coventry": "yellow",
+      "birmingham-dudley": "yellow",
+      "birmingham-oxford": "yellow",
+      "birmingham-tamworth": "yellow"
     }
   },
   "warped_0682.jpg": {
-    "side": "day", "era": "canal", "allowed": ["yellow", "red", "pink", "white"],
+    "side": "day",
+    "era": "canal",
+    "allowed": [
+      "yellow",
+      "red",
+      "pink",
+      "white"
+    ],
     "truth": {
-      "coalbrookdale-shrewsbury": "red", "coalbrookdale-wolverhampton": "red", "dudley-wolverhampton": "red",
-      "stafford-stone": "pink", "derby-nottingham": "white", "birmingham-coventry": "yellow",
-      "birmingham-dudley": "yellow", "birmingham-oxford": "yellow", "birmingham-tamworth": "yellow"
+      "coalbrookdale-shrewsbury": "red",
+      "coalbrookdale-wolverhampton": "red",
+      "dudley-wolverhampton": "red",
+      "stafford-stone": "pink",
+      "derby-nottingham": "white",
+      "birmingham-coventry": "yellow",
+      "birmingham-dudley": "yellow",
+      "birmingham-oxford": "yellow",
+      "birmingham-tamworth": "yellow"
+    }
+  },
+  "warped_0684.jpg": {
+    "side": "day",
+    "era": "rail",
+    "allowed": [
+      "yellow",
+      "red",
+      "pink",
+      "white"
+    ],
+    "truth": {
+      "belper-derby": "white",
+      "belper-leek": "white",
+      "birmingham-coventry": "white",
+      "birmingham-dudley": "pink",
+      "birmingham-nuneaton": "red",
+      "birmingham-oxford": "yellow",
+      "birmingham-redditch": "yellow",
+      "birmingham-tamworth": "red",
+      "birmingham-walsall": "pink",
+      "birmingham-worcester": "yellow",
+      "burtonOnTrent-cannock": "pink",
+      "burtonOnTrent-derby": "red",
+      "burtonOnTrent-stone": "red",
+      "burtonOnTrent-tamworth": "red",
+      "cannock-stafford": "pink",
+      "cannock-farmNorth": "pink",
+      "cannock-walsall": "pink",
+      "cannock-wolverhampton": "pink",
+      "coalbrookdale-kidderminster": "red",
+      "coalbrookdale-shrewsbury": "pink",
+      "coalbrookdale-wolverhampton": "pink",
+      "coventry-nuneaton": "white",
+      "derby-nottingham": "white",
+      "derby-uttoxeter": "white",
+      "dudley-kidderminster": "yellow",
+      "dudley-wolverhampton": "yellow",
+      "gloucester-redditch": "red",
+      "gloucester-worcester": "red",
+      "kidderminster-worcester": "yellow",
+      "leek-stokeOnTrent": "white",
+      "nuneaton-tamworth": "red",
+      "redditch-oxford": "yellow",
+      "stafford-stone": "pink",
+      "stokeOnTrent-stone": "white",
+      "stokeOnTrent-warrington": "white",
+      "stone-uttoxeter": "white",
+      "tamworth-walsall": "pink",
+      "walsall-wolverhampton": "yellow"
     }
   }
 }

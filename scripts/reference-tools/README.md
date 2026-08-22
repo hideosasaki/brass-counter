@@ -24,6 +24,14 @@ copyright and is not committed).
 - `export_descriptors.js` — writes the ORB descriptors the browser matches
   against, `public/scan/ref_*.bin`. Neither ships the board artwork itself.
 
+- `fit_protos.mjs` — re-centres the token color prototypes on the ground-truth
+  tiles and prints a line to paste into `PROTOS`. Only colors with at least
+  eight observations are fitted, so check what it skipped before pasting, and
+  read the printed spread: a prototype is meaningful to about that precision.
+  It fits on the same photos `evaluate.mjs` scores, so the color part of that
+  score is self-consistent rather than held out. Fitting on five photos and
+  scoring the sixth, rotating, is what would turn it into a measurement.
+
 ## Decision masks
 
 Each link is scored over the printed route its tile sits on, traced as a
@@ -49,6 +57,16 @@ The round trip is: `make_mask_data.mjs` → trace in `mask_tool.html` → save
 - `fix_samples.mjs <linkId>...` — moves a link's sample point to the centre of
   its traced band and rebuilds that link's reference patches, writing
   `sample_overrides.json` for `eval_masks.mjs` to try before anything ships.
+
+- `band_coverage.mjs` — prints, per link, how much of its traced band no patch
+  reaches, so a tile there could not be seen. `src/linkMasks.test.js` fails once
+  a gap is big enough to hide one; this shows where the slack is beforehand.
+- `add_points.mjs <out.json> [max points per link]` — writes a candidate
+  `coords.json` with extra sample points on the links whose band has such a gap.
+  Points go on the band centreline, furthest-first so a long band fills from its
+  ends. Score the result with `evaluate.mjs` and `stress_warp.mjs` before
+  shipping it: every added point is also one more place an empty link can fire.
+  Run against the shipped `coords.json` it should be a no-op.
 
 ## Checking for answers on empty board
 

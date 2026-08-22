@@ -1,8 +1,8 @@
 // Pure classification logic for the board scanner. Works on ImageData-like
 // objects ({data, width, height} RGBA) in the canonical board frame, so it is
 // unit-testable without OpenCV or a DOM. Method and thresholds were tuned
-// against five photos of four real board states (195 link positions: 192
-// auto-correct, 3 review, 0 wrong automatic answers); see
+// against six photos of five real board states (234 link positions: 232
+// auto-correct, 2 review, 0 wrong automatic answers); see
 // scripts/reference-tools/evaluate.mjs.
 import { LINK_POSITIONS } from "../linkPositions";
 import { LINK_MASKS } from "../linkMasks";
@@ -12,11 +12,29 @@ export const PATCH_HALF = 100; // patch half-size in canonical px
 export const CELL = 8; // block-average cell size
 export const CENTER_R = 60; // fallback radius for links with no traced mask
 
-// Token color prototypes in chromaticity space (r/(r+g+b), g/(r+g+b)),
-// measured per board side from real photos.
+// Token color prototypes in chromaticity space (r/(r+g+b), g/(r+g+b)), fitted
+// per board side to the mean of the ground-truth tiles by
+// scripts/reference-tools/fit_protos.mjs. What each one rests on, since the
+// numbers differ a lot and anyone tuning AUTO_MIN_MARGIN needs to know which to
+// trust: day yellow 24 tiles over 5 photos, red 22 over 5, pink 18 over 4,
+// white 12 over 3; night pink 12 and white 10, both from the one night photo
+// there is, so those two carry that photo's lighting as well as the tokens'.
+// Night red has never appeared in a photo and night yellow only four times, so
+// those two are still the original hand-measured values.
+//
+// Fitting these matters more than it looks. A prototype off its own cluster
+// costs margin against the neighbouring color, and decideLink turns thin margin
+// into a question, so a mis-centred prototype reads as "this color recognises
+// badly" while in fact every tile was identified correctly. Pink is where it
+// showed: it is the closest color to white on both sides (0.038 apart on the
+// day board against 0.068 or more for every other pair), and the day prototype
+// sat 0.0116 off its cluster toward white, which took its worst margin down to
+// 0.012 against the 0.02 needed to answer without asking. Worth keeping in
+// proportion: within-cluster spread runs 0.004 (day white) to 0.012 (day red),
+// so a prototype is only meaningful to about that precision.
 export const PROTOS = {
-  day: { pink: [0.35, 0.285], red: [0.42, 0.29], yellow: [0.39, 0.355], white: [0.325, 0.327] },
-  night: { pink: [0.355, 0.275], red: [0.42, 0.29], yellow: [0.4, 0.355], white: [0.318, 0.325] },
+  day: { pink: [0.3416, 0.2833], red: [0.4358, 0.2887], yellow: [0.4136, 0.3455], white: [0.3224, 0.3187] },
+  night: { pink: [0.3567, 0.2752], red: [0.42, 0.29], yellow: [0.4, 0.355], white: [0.3154, 0.3222] },
 };
 
 const MASK_SCORE_THRESHOLD = 28;
@@ -41,8 +59,8 @@ export const ERA_REVIEW_MIN_FRAC = 0.2;
 // has to carry to be a token; and how close to plain neutral counts as
 // colorless. Reasoned about in decideLink. Real white tiles measured lift 16.9
 // and up and sat 0.026 from neutral at their most neutral; the palest real
-// colored tile sat 0.042 from it; empty board read 12.3 and under, and -2 on a
-// phone. Both cuts sit in those gaps.
+// colored tile sat 0.042 from it; empty board read 12.3 and under, and -2 on
+// the phone photo that prompted this. Both cuts sit in those gaps.
 export const NEUTRAL_MIN_LIFT = 14;
 const NEUTRAL_UV = [1 / 3, 1 / 3]; // equal parts: no color at all
 const NEUTRAL_MAX_DIST = 0.03;
@@ -58,15 +76,24 @@ export function linkSamplePoints(linkId) {
 // board coordinates. Exported for the offline mask tools, which have to agree
 // with the shipped geometry exactly.
 export function distToPoly(x, y, pts) {
-  let best = Infinity;
+  return closestOnPoly(x, y, pts).d;
+}
+
+// The point on a polyline nearest to (x, y), with its distance. One definition
+// of the geometry: distToPoly asks it for the distance, and the offline tool
+// that places sample points asks it where on the route to put them, so a point
+// cannot land off the band the classifier then scores.
+export function closestOnPoly(x, y, pts) {
+  let best = { x: pts[0][0] * CANONICAL_SIZE, y: pts[0][1] * CANONICAL_SIZE, d: Infinity };
   for (let i = 1; i < pts.length; i++) {
     const ax = pts[i - 1][0] * CANONICAL_SIZE, ay = pts[i - 1][1] * CANONICAL_SIZE;
     const bx = pts[i][0] * CANONICAL_SIZE, by = pts[i][1] * CANONICAL_SIZE;
     const dx = bx - ax, dy = by - ay;
     const len2 = dx * dx + dy * dy;
     const t = len2 ? Math.max(0, Math.min(1, ((x - ax) * dx + (y - ay) * dy) / len2)) : 0;
-    const d = Math.hypot(x - (ax + t * dx), y - (ay + t * dy));
-    if (d < best) best = d;
+    const qx = ax + t * dx, qy = ay + t * dy;
+    const d = Math.hypot(x - qx, y - qy);
+    if (d < best.d) best = { x: qx, y: qy, d };
   }
   return best;
 }
@@ -83,6 +110,43 @@ export function patchCellOffsets(halfSize = PATCH_HALF) {
 }
 
 export const DISC_REGION = (px, py) => px * px + py * py <= CENTER_R * CENTER_R;
+
+// Every cell of a link's traced band, in canonical px. A patch only reaches
+// PATCH_HALF from its sample point, so band cells further than that from every
+// one of a link's points are never scored and a tile there cannot be seen;
+// unscoredCells is what says which those are. Exported because the invariant
+// test and the offline tools that place and report on points all have to mean
+// the same thing by it.
+export function bandCells(mask) {
+  const half = mask.width / 2;
+  const xs = mask.pts.map((p) => p[0] * CANONICAL_SIZE);
+  const ys = mask.pts.map((p) => p[1] * CANONICAL_SIZE);
+  const cells = [];
+  for (let y = Math.min(...ys) - half; y <= Math.max(...ys) + half; y += CELL)
+    for (let x = Math.min(...xs) - half; x <= Math.max(...xs) + half; x += CELL)
+      if (distToPoly(x, y, mask.pts) <= half) cells.push([x, y]);
+  return cells;
+}
+
+// Which of those cells no patch centred on `points` (canonical px) covers.
+export const unscoredCells = (cells, points) =>
+  cells.filter(
+    ([x, y]) =>
+      !points.some(
+        ([cx, cy]) => Math.abs(x - cx) <= PATCH_HALF && Math.abs(y - cy) <= PATCH_HALF
+      )
+  );
+
+// How much band a link may leave unscored. A tile covers about 100 cells, so a
+// smaller gap still leaves most of a tile inside a patch and the link is read
+// anyway. This is a cost bound rather than a hazard bound: closing the last
+// small gaps is not free, because each added point is one more place an empty
+// link can fire, and points added for gaps of 12 and 36 cells were measured to
+// cost a wrong answer on a game photo and a tile invented on empty board. Any
+// value from 39 to 48 leaves the shipped points exactly as they are - below
+// that the cheap points come back, above it a real gap stops being closed - so
+// this sits in the middle of that window rather than on its edge.
+export const MAX_UNSCORED_BAND_CELLS = 45;
 
 // Which cells of a patch count toward the decision, as a predicate on the
 // cell's offset from the patch centre. The mask is anchored to the board
@@ -310,16 +374,19 @@ export function classifyAlignedPatch(pc, rc, gain, shift, inRegion) {
 // the reference's, while a real tile hides the art completely. The same tell
 // catches the other thing that fires without a tile: a printed line the
 // homography left slightly misplaced, which shows the art displaced rather
-// than covered. Measured over five games, blobs of any consequence sit either
-// side of a wide gap - real tiles at most 0.36, glare and misplaced print from
-// 0.55 up - so the cut is the middle of that gap. Small blobs land anywhere
-// (eleven cells of a white tile reached 0.60), but they are too few cells to
-// carry a link on their own. That makes GLARE_MIN_CELLS below load-bearing:
-// with less headroom above real tiles than the old cut had, the cell floor is
-// what stops a fragment of a real tile being thrown away. Raising it does not
-// help - at 12 and above, small glare blobs survive instead and cost more
-// reviews than the fragments are worth.
-export const GLARE_CORR = 0.45;
+// than covered.
+//
+// The cut has little room. Over six photos the largest blob a real tile
+// produced reached 0.468 (a red tile on burtonOnTrent-stone, 85 cells in
+// region), and the smallest blob that had to go was 0.548 (displaced print on
+// belper-derby, 60 cells). Above this cut that print comes back as a question
+// about empty board; below it a real tile is thrown away and the link reads
+// empty, which is the worse of the two, so the cut sits nearer the print. Small
+// blobs land anywhere in between - fragments of white tiles measured 0.52, 0.60
+// and 0.69 - and they are dropped, which costs nothing: at 11 to 28 cells they
+// cannot carry a link, and their links still classify without them. Raising
+// GLARE_MIN_CELLS to spare them only lets small glare blobs through instead.
+export const GLARE_CORR = 0.5;
 export const GLARE_MIN_CELLS = 8;
 
 export const isGlare = (comp) =>
@@ -423,17 +490,24 @@ export function decideLink({ results, allowed, side, chromaOffset = [0, 0] }) {
   const colorless =
     near === "white" ||
     Math.hypot(uv[0] - NEUTRAL_UV[0], uv[1] - NEUTRAL_UV[1]) <= NEUTRAL_MAX_DIST;
-  const color = !colorless
-    ? near
-    : near === "white" && lift >= NEUTRAL_MIN_LIFT
-    ? "white"
-    : null;
+  // Colorless and not bright: print, and named so the branch below does not
+  // turn round and ask about the very thing this just identified. Spelled as a
+  // failure to be bright rather than as dimness so a result with no lift
+  // measured at all cannot pass.
+  const bright = lift >= NEUTRAL_MIN_LIFT;
+  const residue = colorless && !bright;
+  const color = !colorless ? near : near === "white" && bright ? "white" : null;
   let state = "auto";
   if (color === null) {
     // Not any session color: glare or a foreign object. Ask only when it is
     // both large and vaguely tile-colored; far-off chroma (a blue window
-    // reflection) is never a tile, whatever its size.
-    if (frac >= UNMATCHED_EMPTY_MAX_FRAC && bestD < UNMATCHED_REVIEW_MAX_DIST) {
+    // reflection) is never a tile, whatever its size, and neither is print the
+    // warp displaced, however much of the band it covers.
+    if (
+      !residue &&
+      frac >= UNMATCHED_EMPTY_MAX_FRAC &&
+      bestD < UNMATCHED_REVIEW_MAX_DIST
+    ) {
       state = "review";
     }
   } else if (frac < AUTO_MIN_FRAC || bestD > AUTO_MAX_DIST || margin < AUTO_MIN_MARGIN) {

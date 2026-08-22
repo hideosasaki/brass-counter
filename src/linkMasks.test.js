@@ -4,11 +4,14 @@ import {
   CANONICAL_SIZE,
   CENTER_R,
   DISC_REGION,
+  MAX_UNSCORED_BAND_CELLS,
   PATCH_HALF,
+  bandCells,
   distToPoly,
   linkSamplePoints,
   patchCellOffsets,
   patchRegion,
+  unscoredCells,
 } from "./scan/classifier";
 
 describe("LINK_MASKS", () => {
@@ -80,6 +83,34 @@ describe("LINK_MASKS", () => {
       });
     }
     expect(strays.sort()).toEqual(known);
+  });
+
+  // A patch reaches PATCH_HALF from its point, so band area further out than
+  // that from every one of a link's points is never scored, and a tile sitting
+  // there is invisible - which is how a yellow tile on birmingham-worcester's
+  // long route came back as an empty link. Long bands therefore carry several
+  // points; scripts/reference-tools/add_points.mjs places them, against the
+  // same bound this asserts.
+  //
+  // What this does not guarantee: a covered cell is not scored equally well
+  // wherever it sits. The share of a tile a patch sees still varies about
+  // threefold along a band, and the thresholds in decideLink are calibrated in
+  // that share, not in cells. Phrasing the invariant in frac would guard the
+  // decision rather than the geometry, and would take a tile-sized probe slid
+  // along each band to state.
+  test("no gap in a band is big enough to hide a tile", () => {
+    const holes = [];
+    for (const [id, mask] of Object.entries(LINK_MASKS)) {
+      const points = linkSamplePoints(id).map(([nx, ny]) => [
+        nx * CANONICAL_SIZE,
+        ny * CANONICAL_SIZE,
+      ]);
+      const unscored = unscoredCells(bandCells(mask), points).length;
+      if (unscored >= MAX_UNSCORED_BAND_CELLS) {
+        holes.push(`${id}: ${unscored} cells unscored`);
+      }
+    }
+    expect(holes).toEqual([]);
   });
 
   // Two links must never score the same board cell. That is weaker than "no
