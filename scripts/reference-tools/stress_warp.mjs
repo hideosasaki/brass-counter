@@ -5,10 +5,15 @@
 // empty. Every link should come back empty; anything that fires is a mask, a
 // sample point or a threshold that cannot survive a real photo.
 //
-//   node stress_warp.mjs [amplitude px] [wavelength px]
+//   node stress_warp.mjs [amplitude px] [wavelength px] [day|night]
 //
 // 4 and 8px at 400px are around what real photos leave; 12 is past it, and
 // firing there is not by itself a defect.
+//
+// Run both faces. Some gates only exist on the night one - the shadow test in
+// decideLink is there, and its cut deliberately sits below the darkest empty
+// board measured, so this is where the questions it invents on empty board get
+// counted rather than assumed.
 import { readFileSync } from "fs";
 import Jimp from "./node_modules/jimp/dist/index.js";
 import { classifyAllLinks, setRefPatches } from "./pipeline.mjs";
@@ -17,7 +22,8 @@ setRefPatches(JSON.parse(readFileSync("../../public/scan/ref_patches.json", "utf
 
 const AMP = Number(process.argv[2] || 8);
 const WAVE = Number(process.argv[3] || 400);
-const src = await Jimp.read("../../tmp/canonical_day.jpg");
+const SIDE = process.argv[4] || "day";
+const src = await Jimp.read(`../../tmp/canonical_${SIDE}.jpg`);
 const { width: W, height: H, data: S } = src.bitmap;
 const out = src.clone();
 const D = out.bitmap.data;
@@ -30,14 +36,14 @@ for (let y = 0; y < H; y++) {
   }
 }
 const links = classifyAllLinks(out.bitmap, {
-  era: "canal", allowed: ["yellow", "red", "pink", "white"], side: "day",
+  era: "canal", allowed: ["yellow", "red", "pink", "white"], side: SIDE,
 });
 const valid = links.filter((l) => l.eraValid);
 const hits = valid
   .filter((l) => l.frac >= DETECT_MIN_FRAC)
   .sort((a, b) => b.frac - a.frac);
 const bad = hits.filter((l) => l.color || l.state === "review");
-console.log(`amp ${AMP}px wave ${WAVE}px: ${hits.length} of ${valid.length} era-valid links register anything, ${bad.length} of those are not answered empty`);
+console.log(`${SIDE} face, amp ${AMP}px wave ${WAVE}px: ${hits.length} of ${valid.length} era-valid links register anything, ${bad.length} of those are not answered empty`);
 for (const h of hits)
   console.log("  ", h.linkId.padEnd(30), "frac", h.frac.toFixed(3),
     "lift", h.lift.toFixed(1).padStart(6), "color", String(h.color).padEnd(6), h.state);

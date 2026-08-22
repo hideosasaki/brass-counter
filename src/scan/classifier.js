@@ -1,18 +1,19 @@
 // Pure classification logic for the board scanner. Works on ImageData-like
 // objects ({data, width, height} RGBA) in the canonical board frame, so it is
 // unit-testable without OpenCV or a DOM. Method and thresholds were tuned
-// against eight photos of six real board states (312 link positions: 283
-// auto-correct, 26 review, 3 wrong automatic answers); see
+// against eight photos of six real board states (312 link positions: 292
+// auto-correct, 20 review, no wrong automatic answers); see
 // scripts/reference-tools/evaluate.mjs.
 //
-// Six of those photos were taken in daylight and answer everything correctly.
-// The other two are the same night board shot from two directions under indoor
-// light, and every wrong answer left is in the worse of them: three tiles the
-// patch barely reaches, read as empty because their color washed out and their
-// brightness went with it. No cut separates them from board that is genuinely
-// empty - real tiles measured frac 0.20 to 0.28 where empty board reaches 0.294
-// - so the remaining fix is geometry, not another threshold. What catches them
-// today is the map screen, which asks the player to compare with the board.
+// Six of those photos were taken in daylight. The other two are the same board
+// shot from two directions under indoor light, and every question left is in
+// them. Nothing is answered wrong any more, but read that as the corpus being
+// small rather than as the problem being finished: the last three wrong answers
+// were tiles washed colorless and dim, indistinguishable from empty board on
+// every measure the patch itself carries, and what finally caught them was the
+// shadow they cast on the board beside them. That is a real cue and a thin one.
+// Behind it stands the map screen, which asks the player to compare with the
+// board.
 import { LINK_POSITIONS } from "../linkPositions";
 import { LINK_MASKS } from "../linkMasks";
 
@@ -52,7 +53,26 @@ const PROTO_MAX_DIST = 0.05;
 // ghosts measured 0.14-0.18 in the field; real tiles measure >= 0.19.
 const AUTO_MIN_FRAC = 0.2;
 const AUTO_MAX_DIST = 0.04;
-const AUTO_MIN_MARGIN = 0.02;
+// How far the matched color has to beat the runner-up by, per board face. Kept
+// as a table for the same reason PROTOS is one: which face is printed up
+// changes the number.
+//
+// Indoor light does not push a tile's color onto another prototype; it pulls
+// the whole palette in toward neutral, so a reading stays nearest the right
+// color and loses its lead. Fifteen of the twenty-six questions the ground
+// truth produced before the shadow veto were this, every one on the two night
+// photos, thirteen of them already reading correctly. They measured margin
+// 0.005 to 0.019 at dist 0.023 to 0.034, well inside AUTO_MAX_DIST - which is
+// what tells a shrunk reading from an ambiguous one, and why the distance cut
+// is left alone and only this is relaxed.
+//
+// Sweeping the night cut against that same pre-veto baseline: 0.010 leaves
+// seventeen questions, 0.005 leaves thirteen, and at 0 a fourth link answers
+// wrong. The link that turns (burtonOnTrent-derby) sits at margin 0.004, so
+// 0.005 would be touching it. The day face keeps the full 0.02 - no question
+// there ever came from margin, so there is nothing to buy and a wrong answer
+// to risk.
+export const AUTO_MIN_MARGIN = { day: 0.02, night: 0.01 };
 // Real tiles measured frac >= 0.17 in ground truth; sub-0.12 detections are
 // noise (glare, print differences) and are dropped without asking.
 export const DETECT_MIN_FRAC = 0.12;
@@ -85,6 +105,12 @@ export const RESIDUE_MAX_FRAC = 0.4;
 // sit 0.007 apart in distance from neutral, inside their own cluster spread.
 export const WASHOUT_MIN_LIFT = 45;
 export const WASHOUT_MAX_DIST = 0.06;
+// A tile sits on the board and throws a shadow onto the board beside it. How
+// far below the patch's own median a cell has to fall to be counted as in that
+// shadow, and how much of the board around the decision region may be in
+// shadow before an empty answer is refused. Reasoned about in decideLink.
+export const SHADOW_DARK_DY = -12;
+export const SHADOW_MAX_DARK_OUT = 0.24;
 const NEUTRAL_UV = [1 / 3, 1 / 3]; // equal parts: no color at all
 const NEUTRAL_MAX_DIST = 0.03;
 const UNMATCHED_EMPTY_MAX_FRAC = 0.3;
@@ -397,12 +423,20 @@ function maskPatch(pc, rc, gain, inRegion) {
   const cells = [];
   const quiet = [];
   let cellsInRegion = 0;
+  let darkOutside = 0;
   for (let i = 0; i < pc.length; i++) {
     const gx = i % n, gy = (i / n) | 0;
     const px = gx * CELL + CELL / 2 - PATCH_HALF;
     const py = gy * CELL + CELL / 2 - PATCH_HALF;
     const inside = inRegion(px, py);
+    // Outside the band is board the tile can be shading. Measured against the
+    // patch's own median rather than an absolute level, so a dim photo reads as
+    // no shadow anywhere: what marks a tile out is one side of its surroundings
+    // going dark, not the whole patch being dark. Counted here because this
+    // loop already has the offsets and the region test, and over cells the diff
+    // never scores - a shadow is not a detection.
     if (inside) cellsInRegion++;
+    else if (dys[i] - medDy < SHADOW_DARK_DY) darkOutside++;
     const c = pc[i].map((v, k) => v * gain[k]);
     const [pu, pv] = chroma(c);
     const [ru, rv] = chroma(rc[i]);
@@ -420,7 +454,9 @@ function maskPatch(pc, rc, gain, inRegion) {
     }
   }
   const baseDy = cells.length && quiet.length ? median(quiet) : medDy;
-  return { cells, cellsInRegion, baseDy, medDy };
+  const cellsOutside = pc.length - cellsInRegion;
+  const darkOut = cellsOutside ? darkOutside / cellsOutside : 0;
+  return { cells, cellsInRegion, baseDy, medDy, darkOut };
 }
 
 // Reduce a diffed cell set to the per-patch decision values. frac, the color
@@ -450,13 +486,16 @@ function finishPatch(cells, cellsInRegion, baseDy) {
 // folding in the local alignment shift. Every coordinate a consumer sees
 // from here on uses that one convention.
 export function classifyAlignedPatch(pc, rc, gain, shift, inRegion) {
-  const { cells, cellsInRegion, baseDy, medDy } = maskPatch(pc, rc, gain, inRegion);
+  const { cells, cellsInRegion, baseDy, medDy, darkOut } =
+    maskPatch(pc, rc, gain, inRegion);
   const comps = splitComponents(cells).filter((c) => !isGlare(c));
   const r = finishPatch(comps.flatMap((c) => c.cells), cellsInRegion, baseDy);
   const fold = ([x, y]) => [x + shift[0], y + shift[1]];
   return {
     ...r,
     shift,
+    // Share of the board around the region this patch finds in shadow.
+    darkOut,
     // How far this patch's luma sits from the empty-board reference. Only
     // meaningful next to the same figure from the rest of the scan, which is
     // why decideLink takes the scan's median rather than judging it here.
@@ -580,6 +619,28 @@ const washedOut = (medDy, scanLift) =>
   Number.isFinite(scanLift) &&
   medDy - scanLift > WASHOUT_MIN_LIFT;
 
+// Is something casting a shadow on the board beside this band? Restricted to
+// the night side, where the evidence is: patches with a tile on them read
+// darkOut 0.222 there against 0.143 for empty board, while on the day side the
+// two sit at 0.183 and 0.167 with nothing between them. Dropping the
+// restriction costs four questions across the day-face photos and buys nothing.
+//
+// Worth being plain about what that restriction is. `side` is which face of
+// the board is up, not what was lighting it, and the two are only correlated
+// here because both photos taken under indoor light happen to be of the night
+// face. What the shadow really needs is a light source with a direction. So if
+// a day-face board is ever photographed under a lamp, this will sit out the
+// scan that needs it most - and the third night-face photo, which is daylit,
+// runs it for nothing. That one costs no questions as it stands, which is why
+// the proxy is left alone; the day-face measurement above is the thing that
+// would have to change first.
+//
+// Same shape as washedOut: no measurement, no veto.
+const shadowed = (darkOut, side) =>
+  side === "night" &&
+  Number.isFinite(darkOut) &&
+  darkOut > SHADOW_MAX_DARK_OUT;
+
 // Three-way decision for one link from its sample-point results.
 // state: "auto" (trusted) or "review" (ask the human). color: class or null.
 // chromaOffset: per-scan color adaptation [du, dv], estimated from the
@@ -593,10 +654,20 @@ export function decideLink({
   scanLift,
 }) {
   const bestIndex = strongestIndex(results);
-  const { frac, masked, centroid, shift, lift, medDy } = results[bestIndex];
+  const { frac, masked, centroid, shift, lift, medDy, darkOut } =
+    results[bestIndex];
   if (frac < DETECT_MIN_FRAC) {
     // No lift: with nothing detected there is no blob to have measured one on,
     // and a zero here would read as a measurement.
+    //
+    // The shadow veto at the end is not consulted here either, though it is
+    // measured off board the diff never scores and would survive the empty
+    // reading. A tile broad enough to shade the board beside it leaves
+    // something in the band: the three tiles that veto exists for read frac
+    // 0.20 to 0.28, well over this floor. Shadow with nothing at all under it
+    // is the warp instead - pushing the empty night reference through an 8px
+    // displacement field produced exactly that on four links, and asking about
+    // them was the whole cost.
     return { state: "auto", color: null, frac, bestIndex, centroid, shift };
   }
   const mean = masked
@@ -652,7 +723,11 @@ export function decideLink({
     ) {
       state = "review";
     }
-  } else if (frac < AUTO_MIN_FRAC || bestD > AUTO_MAX_DIST || margin < AUTO_MIN_MARGIN) {
+  } else if (
+    frac < AUTO_MIN_FRAC ||
+    bestD > AUTO_MAX_DIST ||
+    margin < AUTO_MIN_MARGIN[side]
+  ) {
     state = "review";
   } else if (washedOut(medDy, scanLift) && neutralDist(uv) < WASHOUT_MAX_DIST) {
     // Indoor light at night lays a bright patch over one corner of the board,
@@ -666,6 +741,18 @@ export function decideLink({
     // saturation left is worth answering on; a pale one is asked about whatever
     // it matched, and however well. This cannot recover the tile's color, only
     // decline to guess it.
+    state = "review";
+  }
+  if (state === "auto" && color === null && shadowed(darkOut, side)) {
+    // A tile lying on the board shades the board beside it, and at night that
+    // shadow outlives everything else about the tile: indoor light takes the
+    // color and the brightness together, and three tiles came back as empty
+    // links in silence, which is the one failure nothing downstream catches.
+    // So this sits after every branch above rather than inside one: whichever
+    // of them was about to answer "nothing here", a shadow next to the band
+    // overrules it and the player is asked. It can only say that something is
+    // there, never what, so like the washed-out veto it refuses an answer and
+    // never supplies one.
     state = "review";
   }
   return {

@@ -7,10 +7,16 @@
 //   cp ../../src/linkMasks.js linkMasks.mjs
 //   sed -e 's|from "../linkPositions"|from "./linkPositions.mjs"|' -e 's|from "../linkMasks"|from "./linkMasks.mjs"|' ../../src/scan/classifier.js > classifier.mjs
 //   sed -e 's|from "../boardData"|from "./boardData.mjs"|' -e 's|from "./classifier"|from "./classifier.mjs"|' ../../src/scan/pipeline.js > pipeline.mjs
-// Latest result (234 positions): 232 auto-correct, 2 review, 0 wrong. The color
-// prototypes are fitted to these same photos (fit_protos.mjs), so read the
-// color part of that score as self-consistent rather than as held out. That is
-// six photos of five board states: app_0682.jpg is the app's own warp of the
+// Latest result (312 positions): 292 auto-correct, 20 review, 0 wrong. The
+// color prototypes are fitted to these same photos (fit_protos.mjs), so read
+// the color part of that score as self-consistent rather than as held out.
+// Eight photos of six board states. Eighteen of the 20 questions come from the
+// two shot under indoor light, where the light pulls the palette in toward
+// neutral and a thin margin is all that is left of most readings. The other two
+// are on daylit photos and were there before that: a yellow tile too faint to
+// name, and print showing through a link no tile is on.
+//
+// Of the eight: app_0682.jpg is the app's own warp of the
 // same board as warped_0682.jpg, kept in the set because the scanner's
 // residual misalignment there is what a self-warped photo cannot reproduce,
 // and warped_0682.jpg shows none of it. Counting both inflates the position

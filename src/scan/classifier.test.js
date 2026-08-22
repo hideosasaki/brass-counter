@@ -20,6 +20,8 @@ import {
   RESIDUE_MAX_FRAC,
   WASHOUT_MIN_LIFT,
   WASHOUT_MAX_DIST,
+  SHADOW_MAX_DARK_OUT,
+  AUTO_MIN_MARGIN,
   PATCH_HALF,
   CELL,
   ALIGN_MARGIN,
@@ -42,6 +44,21 @@ function makePatchImage(size, bg, blob) {
     }
   }
   return { data, width: size, height: size };
+}
+
+// The same patch with the board on one side of it in shadow: darker outside
+// the central disc, on the left only. A tile's shadow falls beside the tile,
+// not over the whole patch, and darkOut is measured against the patch median.
+function makeShadedImage(size, bg, shade) {
+  const img = makePatchImage(size, bg);
+  for (let y = 0; y < size; y++) {
+    for (let x = 0; x < size / 2; x++) {
+      if (DISC_REGION(x - size / 2, y - size / 2)) continue;
+      const i = (y * size + x) * 4;
+      img.data[i] = shade[0]; img.data[i + 1] = shade[1]; img.data[i + 2] = shade[2];
+    }
+  }
+  return img;
 }
 
 const SIZE = PATCH_HALF * 2;
@@ -123,6 +140,31 @@ describe("classifyAlignedPatch", () => {
     // Blob is at the patch center, so the centroid is the shift itself.
     expect(Math.abs(r.centroid[0] - 8)).toBeLessThan(4);
     expect(Math.abs(r.centroid[1] - 8)).toBeLessThan(4);
+  });
+
+  test("darkOut measures shadow outside the decision region only", () => {
+    const rc = cellGrid(makePatchImage(SIZE, GRAY), PATCH_HALF, PATCH_HALF);
+    const plain = cellGrid(makePatchImage(SIZE, GRAY), PATCH_HALF, PATCH_HALF);
+    expect(
+      classifyAlignedPatch(plain, rc, [1, 1, 1], [0, 0], DISC_REGION).darkOut
+    ).toBe(0);
+    // Half the board around the region in shadow: darker by 30, same chroma, so
+    // it never fires the diff and only this reading sees it.
+    const shaded = cellGrid(
+      makeShadedImage(SIZE, GRAY, [90, 90, 90]),
+      PATCH_HALF, PATCH_HALF
+    );
+    const r = classifyAlignedPatch(shaded, rc, [1, 1, 1], [0, 0], DISC_REGION);
+    expect(r.frac).toBeLessThan(0.02);
+    expect(r.darkOut).toBeGreaterThan(0.4);
+    expect(r.darkOut).toBeLessThan(0.6);
+    // A patch shadowed all over has nothing to compare against and reads as no
+    // shadow at all: the measurement is relative to the patch's own median, so
+    // an evenly dim photo cannot make questions everywhere.
+    const dim = cellGrid(makePatchImage(SIZE, [90, 90, 90]), PATCH_HALF, PATCH_HALF);
+    expect(
+      classifyAlignedPatch(dim, rc, [1, 1, 1], [0, 0], DISC_REGION).darkOut
+    ).toBe(0);
   });
 });
 
@@ -344,6 +386,89 @@ describe("decideLink", () => {
         allowed: ["white", "pink"], side: "day",
       })
     ).toMatchObject({ color: "white", state: "auto" });
+  });
+
+  // A tile lying on the board throws a shadow onto the board beside it, and
+  // under indoor light at night that shadow is the one thing left when the
+  // tile's own color and brightness have gone. It says a tile is there and
+  // nothing about which one, so it can only refuse an empty answer - the same
+  // shape as the washed-out veto. Measured on the night photos: the three tiles
+  // answered empty carried darkOut 0.30, 0.33 and 0.36 where night board with
+  // nothing on it reached 0.28.
+  test("shadow beside the band refuses an empty answer at night", () => {
+    const colorless = [[150, 148, 150], [152, 150, 151]];
+    const call = (darkOut, side = "night") =>
+      decideLink({
+        results: [{ frac: 0.28, masked: colorless, lift: -4, darkOut }],
+        allowed: ["white", "pink"],
+        side,
+      });
+    expect(call(0.1)).toMatchObject({ color: null, state: "auto" });
+    expect(call(SHADOW_MAX_DARK_OUT + 0.05)).toMatchObject({
+      color: null,
+      state: "review",
+    });
+    // The day face has no usable shadow to read; the measurements are at the
+    // shadowed() comment.
+    expect(call(SHADOW_MAX_DARK_OUT + 0.05, "day")).toMatchObject({ state: "auto" });
+    // Nothing measured, no veto.
+    expect(call(undefined)).toMatchObject({ state: "auto" });
+  });
+
+  // Shadow with nothing under it is the warp, not a tile. A tile broad enough
+  // to shade the board beside it always leaves something in the band - the
+  // three tiles the veto is here for read frac 0.20 to 0.28 - while a
+  // displacement field over the empty night reference darkens one side of a
+  // patch with no blob anywhere near the floor. Letting the veto reach below
+  // DETECT_MIN_FRAC put four questions on provably empty board at 8px of warp
+  // and bought nothing.
+  test("shadow over an empty band is the warp, and stays quiet", () => {
+    const r = decideLink({
+      results: [{ frac: 0.05, masked: [], darkOut: SHADOW_MAX_DARK_OUT + 0.05 }],
+      allowed: ["white", "pink"],
+      side: "night",
+    });
+    expect(r).toMatchObject({ color: null, state: "auto" });
+  });
+
+  // Unlike every other cut here, this one does not separate its two
+  // populations: night board with nothing on it reaches 0.281, above the cut.
+  // What keeps that from costing questions is the DETECT_MIN_FRAC floor above,
+  // not this number, so read the flat 0.20-0.28 range as genuinely flat rather
+  // than as room. Sitting at the top of it would put the cut 0.02 from empty
+  // board and gain nothing.
+  test("the shadow cut clears the tiles it is there for", () => {
+    expect(SHADOW_MAX_DARK_OUT).toBeLessThan(0.301); // faintest shadow over a lost tile
+    expect(SHADOW_MAX_DARK_OUT).toBeGreaterThan(0.2); // below this, empty board fires freely
+  });
+
+  // Indoor light at night does not move a tile's color to another color's
+  // prototype, it pulls every color in toward neutral, and the whole palette
+  // shrinks with it. Readings stay nearest the right prototype - measured dist
+  // 0.023 to 0.034 against the 0.04 allowed - while the gap to the runner-up
+  // falls to 0.005-0.019 and the answer turns into a question. Fifteen of the
+  // night questions came from this, thirteen of them already reading correctly,
+  // and not one day-lit question did.
+  test("thin margin still answers on the night board", () => {
+    const call = (masked, side) =>
+      decideLink({ results: [{ frac: 0.5, masked }], allowed: ["pink", "white"], side });
+    // Reading 0.024 from night pink with 0.015 to spare over night white.
+    expect(call([[171, 147, 183]], "night")).toMatchObject({
+      color: "pink",
+      state: "auto",
+    });
+    // The same margin by day is still a question: day-lit photos never needed
+    // this and the day prototypes are the better measured ones.
+    expect(call([[168, 147, 185]], "day")).toMatchObject({ state: "review" });
+    // Under the night cut it is a question on either side.
+    expect(call([[169, 148, 183]], "night")).toMatchObject({ state: "review" });
+  });
+
+  test("the night margin cut keeps its distance from the reading it stops", () => {
+    expect(AUTO_MIN_MARGIN.night).toBeLessThan(AUTO_MIN_MARGIN.day);
+    // Drop the cut to 0.004 and a fourth night link answers wrong; 0.005 would
+    // be touching it.
+    expect(AUTO_MIN_MARGIN.night).toBeGreaterThan(0.005);
   });
 
   test("the washed-out cuts sit between the measured populations", () => {
