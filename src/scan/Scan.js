@@ -13,7 +13,7 @@ import {
 import { linksFromAssignments } from "../linkScoreData";
 import { eraTitle } from "../eras";
 import { detectedPoint, CANONICAL_SIZE, DETECT_MIN_FRAC } from "./classifier";
-import { ensureEngine, scanPhoto, ScanError, CLOSE_PAIRS } from "./pipeline";
+import { ensureEngine, scanPhoto, ScanError } from "./pipeline";
 import "bootstrap/dist/css/bootstrap.min.css";
 
 const STAGES = [
@@ -273,21 +273,6 @@ function Scan() {
   }
 
   // ---- review queue / single edit ------------------------------------------
-  // If this link and a close neighbour both detected something, the tile in
-  // the preview may actually belong to the neighbour.
-  const crosstalkNeighbor = (linkId) => {
-    const r = linkResultById[linkId];
-    if (!r || r.frac < DETECT_MIN_FRAC) return null;
-    for (const [a, b] of CLOSE_PAIRS) {
-      if (a === linkId || b === linkId) {
-        const other = a === linkId ? b : a;
-        const ro = linkResultById[other];
-        if (ro && ro.frac >= DETECT_MIN_FRAC) return other;
-      }
-    }
-    return null;
-  };
-
   // Shown on review cards during the beta so field reports can tell us why
   // something was flagged.
   const debugLine = (linkId) => {
@@ -303,7 +288,6 @@ function Scan() {
   // Always renders cardLinkId, the link cardPatchUrl was cut for.
   const cardFor = (heading) => {
     const linkId = cardLinkId;
-    const neighbor = crosstalkNeighbor(linkId);
     return (
       <div className="container mt-3" style={{ maxWidth: 480 }}>
         <h5>{heading}</h5>
@@ -319,13 +303,6 @@ function Scan() {
             This link cannot be built in the {era} era. If a tile is shown here,
             it probably belongs to a neighbouring link — choose Empty and assign
             it on the map. Only pick a color if it was really built here.
-          </div>
-        ) : neighbor ? (
-          <div className="alert alert-warning py-2 my-2">
-            The tile shown may belong to the adjacent{" "}
-            <LinkName linkId={neighbor} /> link. Pick a color
-            only if it sits on <LinkName linkId={linkId} />; otherwise choose
-            Empty.
           </div>
         ) : (
           <div className="text-secondary mb-2">Whose link is this?</div>
@@ -390,7 +367,7 @@ function Scan() {
                 inliers: scan.inliers,
                 era,
                 allowed: sessionClasses,
-                links: scan.links.map(({ linkId, state, color, frac, dist, margin, centroid, shift, suppressedBy }) => ({
+                links: scan.links.map(({ linkId, state, color, frac, dist, margin, centroid, shift }) => ({
                   linkId, state, color,
                   frac: Number(frac.toFixed(3)),
                   dist: dist !== undefined ? Number(dist.toFixed(3)) : undefined,
@@ -399,7 +376,6 @@ function Scan() {
                   // shift already folded into the centroid)
                   centroid: frac >= DETECT_MIN_FRAC && centroid ? centroid.map(Math.round) : undefined,
                   shift,
-                  suppressedBy,
                 })),
               };
               const text = JSON.stringify(report);

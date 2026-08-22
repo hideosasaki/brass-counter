@@ -370,9 +370,9 @@ export function decideLink({ results, allowed, side, chromaOffset = [0, 0] }) {
 }
 
 // A link's color decision and the evidence behind it, cleared. Callers that
-// overrule decideLink (a link that cannot exist this era, one emptied as a
-// neighbour's crosstalk) spread this over its result, so the fields that back
-// a color are listed in one place, next to the code that fills them.
+// overrule decideLink (a link that cannot exist this era) spread this over
+// its result, so the fields that back a color are listed in one place, next
+// to the code that fills them.
 export const NO_COLOR = {
   color: null,
   dist: undefined,

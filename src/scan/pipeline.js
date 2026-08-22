@@ -248,33 +248,11 @@ export async function scanPhoto(file, { era, allowed, onStage }) {
   }
 }
 
-// Pairs of links whose sample points sit so close together that a tile on
-// one can bleed into the other's patch. When both fire, a machine cannot
-// tell one-real-plus-crosstalk from two real tiles, so both go to review.
-const CLOSE_PAIR_DIST = 0.055; // in normalized board units (~113px at 2048)
-
-// Canonical px between the dominant-component centroids seen from the two
-// patches; the same tile measures nearly zero (only patch-edge truncation
-// bias), separate tiles measure at least a tile width.
-const SHARED_BLOB_DIST = 40;
-// Strong/weak frac ratio above which the weak side is just the tile's edge:
-// ambiguous same-tile cases measured 1.3-1.5, edge bleed measured >= 1.9.
-const SHARED_FRAC_RATIO = 1.7;
-
-export const CLOSE_PAIRS = (() => {
-  const pairs = [];
-  for (let i = 0; i < LINKS.length; i++) {
-    for (let j = i + 1; j < LINKS.length; j++) {
-      const a = linkSamplePoints(LINKS[i].id);
-      const b = linkSamplePoints(LINKS[j].id);
-      const close = a.some(([ax, ay]) =>
-        b.some(([bx, by]) => Math.hypot(ax - bx, ay - by) < CLOSE_PAIR_DIST)
-      );
-      if (close) pairs.push([LINKS[i].id, LINKS[j].id]);
-    }
-  }
-  return pairs;
-})();
+// A tile laid across a junction can reach into two links' bands, and used to
+// be caught here and sent to review. That case is a misplacement, which this
+// scanner treats as the player's to avoid: recognising a neatly placed board
+// is the promise, and questions asked about sloppy ones cost more than they
+// buy. The pass is at ddbbcac if a double count ever shows up in a real game.
 
 // Pure of OpenCV: classify all 39 link positions on the canonical frame.
 // regionFor is the decision-region policy; the offline harness swaps it to
@@ -313,7 +291,7 @@ export function classifyAllLinks(
     (link) => decideLink({ results: patchResults[link.id], allowed, side })
   );
   const chromaOffset = estimateChromaOffset(firstPass, side);
-  const out = LINKS.map((link) => {
+  return LINKS.map((link) => {
     const eraValid = era === "canal" ? link.canal : link.rail;
     const r = decideLink({
       results: patchResults[link.id],
@@ -333,53 +311,6 @@ export function classifyAllLinks(
       state: r.frac >= DETECT_MIN_FRAC ? "review" : r.state,
     };
   });
-  const byId = Object.fromEntries(out.map((r) => [r.linkId, r]));
-  // Board-coordinate centroid of the component that dominates a link's disc
-  // mask. The mask spans the full patch, so a tile straddling two patches is
-  // seen whole by both: the same physical tile yields (nearly) the same
-  // board centroid from either side, while two separate tiles do not.
-  const dominantComponent = (r) => {
-    const [nx, ny] = linkSamplePoints(r.linkId)[r.bestIndex || 0];
-    let best = null, bestIn = 0;
-    for (const comp of patchResults[r.linkId][r.bestIndex || 0].comps) {
-      const inside = comp.cells.filter((c) => c.inRegion).length;
-      if (inside > bestIn) { bestIn = inside; best = comp; }
-    }
-    if (!best) return null;
-    return [
-      nx * CANONICAL_SIZE + best.centroid[0],
-      ny * CANONICAL_SIZE + best.centroid[1],
-    ];
-  };
-  for (const [a, b] of CLOSE_PAIRS) {
-    const ra = byId[a], rb = byId[b];
-    if (ra.frac < DETECT_MIN_FRAC || rb.frac < DETECT_MIN_FRAC) continue;
-    const pa = dominantComponent(ra), pb = dominantComponent(rb);
-    if (!pa || !pb) continue;
-    if (Math.hypot(pa[0] - pb[0], pa[1] - pb[1]) < SHARED_BLOB_DIST) {
-      // One tile seen from two patches. When one side sees far more of it,
-      // the tile is on that link and the other side only caught its edge:
-      // empty the weak side. Comparable strengths are genuinely ambiguous,
-      // so ask the human.
-      const [strong, weak] = ra.frac >= rb.frac ? [ra, rb] : [rb, ra];
-      if (strong.frac >= SHARED_FRAC_RATIO * weak.frac) {
-        // Emit a coherent empty result, not just a flipped color: consumers
-        // gate on frac/centroid, and the map dot must not sit on the
-        // neighbour's tile. suppressedBy keeps the audit trail for debug.
-        Object.assign(weak, NO_COLOR, {
-          state: "auto",
-          frac: 0,
-          centroid: [...weak.shift],
-          suppressedBy: strong.linkId,
-        });
-      } else {
-        for (const r of [ra, rb]) {
-          if (r.state === "auto" && r.color) r.state = "review";
-        }
-      }
-    }
-  }
-  return out;
 }
 
 // Reference patches (cell grids at every link sample point), computed once

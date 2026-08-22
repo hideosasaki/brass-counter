@@ -64,7 +64,11 @@ async function run(regionFor, label) {
 }
 
 console.log(`masks: ${maskFile || "src/linkMasks.js"}${widthScale === 1 ? "" : `, widths x${widthScale}`}`);
-const disc = await run(discFor, "disc R=60 (what the masks replaced)");
+// The disc column swaps the decision region back, but the crosstalk pass that
+// used to sit behind it is gone, so this is not a rerun of the previous
+// release: its wrong answers are ones that pass used to catch. Read it as the
+// region change on its own, which is what it is here to measure.
+const disc = await run(discFor, "disc R=60 (region change only, not the old build)");
 const masked = await run(maskRegion, "polyline masks");
 const d = (a, b) => (b - a >= 0 ? "+" : "") + (b - a);
 console.log(`\ndelta: auto ${d(disc.ok, masked.ok)}, review ${d(disc.review, masked.review)}, wrong ${d(disc.wrong, masked.wrong)}`);

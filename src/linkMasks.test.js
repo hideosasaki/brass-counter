@@ -1,8 +1,10 @@
 import { LINKS } from "./boardData";
 import { LINK_MASKS } from "./linkMasks";
 import {
+  CANONICAL_SIZE,
   CENTER_R,
   DISC_REGION,
+  PATCH_HALF,
   linkSamplePoints,
   patchCellOffsets,
   patchRegion,
@@ -47,6 +49,41 @@ describe("LINK_MASKS", () => {
       });
     }
     expect(thin).toEqual([]);
+  });
+
+  // Two links must never score the same board cell. That is weaker than "no
+  // tile can reach both" — eighteen pairs of bands run closer together than a
+  // tile is wide, which is what pipeline.flagSharedTiles is there for — but it
+  // is the part the traced data itself has to get right, and it is checked
+  // through the shipped region predicate rather than a copy of the geometry.
+  test("no two regions claim the same board cell", () => {
+    const cells = patchCellOffsets();
+    const anchors = Object.keys(LINK_MASKS).flatMap((id) =>
+      linkSamplePoints(id).map(([nx, ny], i) => ({
+        id,
+        i,
+        cx: Math.round(nx * CANONICAL_SIZE),
+        cy: Math.round(ny * CANONICAL_SIZE),
+        inRegion: patchRegion(id, i, [0, 0]),
+      }))
+    );
+    const shared = [];
+    for (let a = 0; a < anchors.length; a++) {
+      for (let b = a + 1; b < anchors.length; b++) {
+        const A = anchors[a], B = anchors[b];
+        if (A.id === B.id) continue;
+        // Patches this far apart cannot hold a cell in common.
+        if (Math.abs(A.cx - B.cx) >= 2 * PATCH_HALF) continue;
+        if (Math.abs(A.cy - B.cy) >= 2 * PATCH_HALF) continue;
+        const both = cells.filter(
+          ([px, py]) =>
+            A.inRegion(px, py) &&
+            B.inRegion(A.cx + px - B.cx, A.cy + py - B.cy)
+        ).length;
+        if (both) shared.push(`${A.id}[${A.i}] / ${B.id}[${B.i}]: ${both} cells`);
+      }
+    }
+    expect(shared).toEqual([]);
   });
 
   // Every link is traced today, so nothing in production reaches the fallback.
