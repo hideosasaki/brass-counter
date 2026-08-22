@@ -12,7 +12,7 @@ import {
 } from "../linkDisplay";
 import { linksFromAssignments } from "../linkScoreData";
 import { eraTitle } from "../eras";
-import { detectedPoint, CANONICAL_SIZE, DETECT_MIN_FRAC } from "./classifier";
+import { detectedPoint, CANONICAL_SIZE } from "./classifier";
 import { ensureEngine, scanPhoto, ScanError } from "./pipeline";
 import "bootstrap/dist/css/bootstrap.min.css";
 
@@ -50,7 +50,6 @@ function Scan() {
   const [assignments, setAssignments] = useState({}); // linkId -> class|null
   const [reviewIndex, setReviewIndex] = useState(0);
   const [editingLink, setEditingLink] = useState(null); // from map view
-  const [debugReport, setDebugReport] = useState(null);
   const fileInput = useRef(null);
   const libraryInput = useRef(null);
 
@@ -273,18 +272,6 @@ function Scan() {
   }
 
   // ---- review queue / single edit ------------------------------------------
-  // Shown on review cards during the beta so field reports can tell us why
-  // something was flagged.
-  const debugLine = (linkId) => {
-    const r = linkResultById[linkId];
-    if (!r) return null;
-    const parts = [`frac ${r.frac.toFixed(2)}`];
-    if (r.dist !== undefined) parts.push(`d ${r.dist.toFixed(3)}`);
-    if (r.margin !== undefined && r.margin < 1) parts.push(`m ${r.margin.toFixed(3)}`);
-    if (r.color) parts.push(`guess ${r.color}`);
-    return parts.join(" · ");
-  };
-
   // Always renders cardLinkId, the link cardPatchUrl was cut for.
   const cardFor = (heading) => {
     const linkId = cardLinkId;
@@ -308,7 +295,6 @@ function Scan() {
           <div className="text-secondary mb-2">Whose link is this?</div>
         )}
         {colorButtons(linkId)}
-        <div className="text-secondary small mt-2">{debugLine(linkId)}</div>
       </div>
     );
   };
@@ -359,61 +345,6 @@ function Scan() {
           <button className="btn btn-outline-secondary" onClick={() => goTo({ phase: "setup" })}>
             Rescan
           </button>
-          <button
-            className="btn btn-link text-secondary btn-sm"
-            onClick={() => {
-              const report = {
-                side: scan.side,
-                inliers: scan.inliers,
-                era,
-                allowed: sessionClasses,
-                links: scan.links.map(({ linkId, state, color, frac, lift, dist, margin, centroid, shift }) => ({
-                  linkId, state, color,
-                  frac: Number(frac.toFixed(3)),
-                  // brightness over the surrounding board; tells a white tile
-                  // from the neutral residue of misplaced print
-                  lift: frac >= DETECT_MIN_FRAC ? Math.round(lift) : undefined,
-                  dist: dist !== undefined ? Number(dist.toFixed(3)) : undefined,
-                  margin: margin !== undefined && margin < 1 ? Number(margin.toFixed(3)) : undefined,
-                  // canonical px relative to the calibrated point (align
-                  // shift already folded into the centroid)
-                  centroid: frac >= DETECT_MIN_FRAC && centroid ? centroid.map(Math.round) : undefined,
-                  shift,
-                })),
-              };
-              const text = JSON.stringify(report);
-              if (navigator.clipboard && window.isSecureContext) {
-                navigator.clipboard
-                  .writeText(text)
-                  .then(() => window.alert("Debug report copied"));
-                return;
-              }
-              // http:// dev server has no clipboard API; use the legacy one
-              const ta = document.createElement("textarea");
-              ta.value = text;
-              ta.readOnly = true;
-              ta.style.position = "fixed";
-              ta.style.opacity = "0";
-              document.body.appendChild(ta);
-              ta.focus();
-              ta.setSelectionRange(0, text.length);
-              const copied = document.execCommand("copy");
-              document.body.removeChild(ta);
-              if (copied) window.alert("Debug report copied");
-              else setDebugReport(text); // last resort: show it
-            }}
-          >
-            Copy debug report
-          </button>
-          {debugReport && (
-            <textarea
-              readOnly
-              className="form-control font-monospace"
-              style={{ fontSize: 10, height: 140 }}
-              value={debugReport}
-              onFocus={(e) => e.target.select()}
-            />
-          )}
         </div>
       </div>
     );
