@@ -53,6 +53,9 @@ function App() {
           </EraScreen>
         }
       />
+      {/* Hosting rewrites unknown paths to index.html rather than serving a
+          404, so a truncated link arrives here and needs somewhere to go. */}
+      <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>
   );
 }
