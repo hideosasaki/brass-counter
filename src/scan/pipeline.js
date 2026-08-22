@@ -14,6 +14,7 @@ import {
   patchRegion,
   decideLink,
   estimateChromaOffset,
+  estimateScanLift,
   NO_COLOR,
   ERA_REVIEW_MIN_FRAC,
   PATCH_HALF,
@@ -291,6 +292,11 @@ export function classifyAllLinks(
     (link) => decideLink({ results: patchResults[link.id], allowed, side })
   );
   const chromaOffset = estimateChromaOffset(firstPass, side);
+  // What a patch's luma offset looks like where nothing is reflecting off the
+  // board. decideLink compares each patch against this rather than against a
+  // fixed number, so an evenly dark or bright photo is not read as glare
+  // everywhere.
+  const scanLift = estimateScanLift(patchResults);
   return LINKS.map((link) => {
     const eraValid = era === "canal" ? link.canal : link.rail;
     const r = decideLink({
@@ -298,6 +304,7 @@ export function classifyAllLinks(
       allowed,
       side,
       chromaOffset,
+      scanLift,
     });
     if (eraValid) return { linkId: link.id, eraValid, ...r };
     // This link cannot exist this era. A detection with real mass behind it

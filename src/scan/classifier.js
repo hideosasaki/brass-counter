@@ -1,9 +1,18 @@
 // Pure classification logic for the board scanner. Works on ImageData-like
 // objects ({data, width, height} RGBA) in the canonical board frame, so it is
 // unit-testable without OpenCV or a DOM. Method and thresholds were tuned
-// against six photos of five real board states (234 link positions: 232
-// auto-correct, 2 review, 0 wrong automatic answers); see
+// against eight photos of six real board states (312 link positions: 283
+// auto-correct, 26 review, 3 wrong automatic answers); see
 // scripts/reference-tools/evaluate.mjs.
+//
+// Six of those photos were taken in daylight and answer everything correctly.
+// The other two are the same night board shot from two directions under indoor
+// light, and every wrong answer left is in the worse of them: three tiles the
+// patch barely reaches, read as empty because their color washed out and their
+// brightness went with it. No cut separates them from board that is genuinely
+// empty - real tiles measured frac 0.20 to 0.28 where empty board reaches 0.294
+// - so the remaining fix is geometry, not another threshold. What catches them
+// today is the map screen, which asks the player to compare with the board.
 import { LINK_POSITIONS } from "../linkPositions";
 import { LINK_MASKS } from "../linkMasks";
 
@@ -62,6 +71,20 @@ export const ERA_REVIEW_MIN_FRAC = 0.2;
 // colored tile sat 0.042 from it; empty board read 12.3 and under, and -2 on
 // the phone photo that prompted this. Both cuts sit in those gaps.
 export const NEUTRAL_MIN_LIFT = 14;
+// How much of the decision region a colorless dim blob may cover and still be
+// read as displaced print rather than asked about. Reasoned about in decideLink.
+export const RESIDUE_MAX_FRAC = 0.4;
+// A patch this much brighter than the rest of the scan is under a reflection,
+// and a pale reading taken inside it is not evidence of anything. Reasoned
+// about in decideLink. Both cuts sit between measured populations: patches that
+// answered wrong ran 48.1 and above over their scan's median against 44.0 for
+// the brightest that answered correctly, and the washed-out readings sat 0.036
+// and 0.052 from neutral where a saturated tile reads 0.07 (yellow) to 0.10
+// (red). Judging the reading rather than the color it matched matters: the
+// prototypes move whenever fit_protos.mjs runs, and night pink and night yellow
+// sit 0.007 apart in distance from neutral, inside their own cluster spread.
+export const WASHOUT_MIN_LIFT = 45;
+export const WASHOUT_MAX_DIST = 0.06;
 const NEUTRAL_UV = [1 / 3, 1 / 3]; // equal parts: no color at all
 const NEUTRAL_MAX_DIST = 0.03;
 const UNMATCHED_EMPTY_MAX_FRAC = 0.3;
@@ -397,7 +420,7 @@ function maskPatch(pc, rc, gain, inRegion) {
     }
   }
   const baseDy = cells.length && quiet.length ? median(quiet) : medDy;
-  return { cells, cellsInRegion, baseDy };
+  return { cells, cellsInRegion, baseDy, medDy };
 }
 
 // Reduce a diffed cell set to the per-patch decision values. frac, the color
@@ -427,13 +450,17 @@ function finishPatch(cells, cellsInRegion, baseDy) {
 // folding in the local alignment shift. Every coordinate a consumer sees
 // from here on uses that one convention.
 export function classifyAlignedPatch(pc, rc, gain, shift, inRegion) {
-  const { cells, cellsInRegion, baseDy } = maskPatch(pc, rc, gain, inRegion);
+  const { cells, cellsInRegion, baseDy, medDy } = maskPatch(pc, rc, gain, inRegion);
   const comps = splitComponents(cells).filter((c) => !isGlare(c));
   const r = finishPatch(comps.flatMap((c) => c.cells), cellsInRegion, baseDy);
   const fold = ([x, y]) => [x + shift[0], y + shift[1]];
   return {
     ...r,
     shift,
+    // How far this patch's luma sits from the empty-board reference. Only
+    // meaningful next to the same figure from the rest of the scan, which is
+    // why decideLink takes the scan's median rather than judging it here.
+    medDy,
     centroid: fold(r.centroid),
     comps: comps.map((c) => ({ ...c, centroid: fold(c.centroid) })),
   };
@@ -459,9 +486,28 @@ export function classifyAlignedPatch(pc, rc, gain, shift, inRegion) {
 // GLARE_MIN_CELLS to spare them only lets small glare blobs through instead.
 export const GLARE_CORR = 0.5;
 export const GLARE_MIN_CELLS = 8;
+// Above this size the correlation stops being evidence. The test asks whether
+// the photo's luma tracks the reference art, which only means anything while
+// the component is a blob sitting on board; a component covering most of the
+// patch IS mostly board, so it tracks the art whatever fired the diff,
+// and the answer comes back "glare" for a tile that is plainly there. Measured
+// on two night photos where indoor light shifted the whole patch: real tiles
+// made components of 385, 390 and 500 cells at corr 0.58-0.68 and their links
+// read empty, which costs points silently. The six day-lit photos never dropped
+// a component over 111 cells, so nothing there changes. What keeps the one
+// large blob with no tile under it (372 cells of glare haze on belper-leek)
+// from becoming an answer is the color and lift gates downstream, which put it
+// to review; this cut is not a tile detector and must not be read as one.
+// Written as a share of the patch rather than the 250 cells it works out to:
+// the whole argument is about how much of the patch a component covers, so it
+// has to follow PATCH_HALF and CELL rather than silently mean something else
+// when either changes.
+export const GLARE_MAX_CELLS = 0.4 * (2 * PATCH_HALF / CELL) ** 2;
 
 export const isGlare = (comp) =>
-  comp.cells.length >= GLARE_MIN_CELLS && comp.corr >= GLARE_CORR;
+  comp.cells.length >= GLARE_MIN_CELLS &&
+  comp.cells.length <= GLARE_MAX_CELLS &&
+  comp.corr >= GLARE_CORR;
 
 // Split a patch's masked cells into 8-connected components on the cell grid.
 // Cells are keyed by integer grid index; the 64 stride is safe because patch
@@ -521,14 +567,33 @@ function nearestProto(uv, side, allowed) {
   return { best, bestD, margin: second - bestD };
 }
 
+// Distance from plain neutral, the axis every "has this any color left" test
+// here is measured on: NEUTRAL_MAX_DIST for colorless, WASHOUT_MAX_DIST for a
+// reading too pale to trust inside a reflection.
+const neutralDist = ([u, v]) => Math.hypot(u - NEUTRAL_UV[0], v - NEUTRAL_UV[1]);
+
+// A patch is washed out when its own luma offset runs far above the scan's.
+// Written so a missing measurement cannot make the answer worse: with nothing
+// to compare, no veto.
+const washedOut = (medDy, scanLift) =>
+  Number.isFinite(medDy) &&
+  Number.isFinite(scanLift) &&
+  medDy - scanLift > WASHOUT_MIN_LIFT;
+
 // Three-way decision for one link from its sample-point results.
 // state: "auto" (trusted) or "review" (ask the human). color: class or null.
 // chromaOffset: per-scan color adaptation [du, dv], estimated from the
 // scan's confident detections and subtracted from every blob's chroma so a
 // camera or lighting tint measured on one color corrects the others too.
-export function decideLink({ results, allowed, side, chromaOffset = [0, 0] }) {
+export function decideLink({
+  results,
+  allowed,
+  side,
+  chromaOffset = [0, 0],
+  scanLift,
+}) {
   const bestIndex = strongestIndex(results);
-  const { frac, masked, centroid, shift, lift } = results[bestIndex];
+  const { frac, masked, centroid, shift, lift, medDy } = results[bestIndex];
   if (frac < DETECT_MIN_FRAC) {
     // No lift: with nothing detected there is no blob to have measured one on,
     // and a zero here would read as a measurement.
@@ -558,15 +623,21 @@ export function decideLink({ results, allowed, side, chromaOffset = [0, 0] }) {
   // bright enough to be opaque, and otherwise it is nothing at all - never
   // some other color, which is why this reads as a veto and not as a second
   // opinion. Written so a result with no lift measured cannot pass either.
-  const colorless =
-    near === "white" ||
-    Math.hypot(uv[0] - NEUTRAL_UV[0], uv[1] - NEUTRAL_UV[1]) <= NEUTRAL_MAX_DIST;
+  const colorless = near === "white" || neutralDist(uv) <= NEUTRAL_MAX_DIST;
   // Colorless and not bright: print, and named so the branch below does not
   // turn round and ask about the very thing this just identified. Spelled as a
   // failure to be bright rather than as dimness so a result with no lift
   // measured at all cannot pass.
   const bright = lift >= NEUTRAL_MIN_LIFT;
-  const residue = colorless && !bright;
+  // Reading it as print holds only while the blob is the size print comes in.
+  // Indoor light at night washes a tile's color out and brightens the board
+  // around it at the same time, so lift stays low and a real tile lands here -
+  // and this branch answered empty on tiles covering half the band, silently,
+  // which costs points with nothing on screen to catch it. Real tiles lost that
+  // way measured frac 0.47 to 0.56; displaced print and fold ghosts never
+  // passed 0.30 on board that was provably empty, stress_warp included. Over
+  // the cut the blob is not print, so it falls through to the question below.
+  const residue = colorless && !bright && frac < RESIDUE_MAX_FRAC;
   const color = !colorless ? near : near === "white" && bright ? "white" : null;
   let state = "auto";
   if (color === null) {
@@ -582,6 +653,19 @@ export function decideLink({ results, allowed, side, chromaOffset = [0, 0] }) {
       state = "review";
     }
   } else if (frac < AUTO_MIN_FRAC || bestD > AUTO_MAX_DIST || margin < AUTO_MIN_MARGIN) {
+    state = "review";
+  } else if (washedOut(medDy, scanLift) && neutralDist(uv) < WASHOUT_MAX_DIST) {
+    // Indoor light at night lays a bright patch over one corner of the board,
+    // and inside it a tile's chroma slides toward neutral until it lands on
+    // whichever color sits nearest neutral - measured on a red tile answered
+    // pink and a yellow one answered white, both with margin to spare, because
+    // every gate above is a distance to a prototype and none of them knows the
+    // reading came from a region where color is gone. So the region has to be
+    // recognised instead: its patches read far brighter against the empty board
+    // than the rest of the scan does. Inside one, only a reading with real
+    // saturation left is worth answering on; a pale one is asked about whatever
+    // it matched, and however well. This cannot recover the tile's color, only
+    // decline to guess it.
     state = "review";
   }
   return {
@@ -600,6 +684,21 @@ export const NO_COLOR = {
   margin: undefined,
   uv: undefined,
 };
+
+// The luma offset a patch in this scan carries when nothing is reflecting off
+// it. Sits here rather than in the pipeline because it is the reference half of
+// the WASHOUT_MIN_LIFT comparison, and both halves have to be the same median.
+// A plain median over every patch is the point: a reflection covers a corner of
+// the board, so the middle of the distribution is board without one. Should a
+// reflection ever cover most of the board there is no unlit rest to compare
+// against, and no gate here can help.
+export function estimateScanLift(patchResults) {
+  const dys = Object.values(patchResults)
+    .flat()
+    .map((r) => r.medDy)
+    .filter(Number.isFinite);
+  return dys.length ? median(dys) : undefined;
+}
 
 // Estimate the scan-wide chroma tint from confident first-pass detections:
 // the mean deviation of their blobs from their matched prototypes.

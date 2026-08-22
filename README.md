@@ -16,6 +16,8 @@ Live at [https://brass-counter.web.app](https://brass-counter.web.app) — no ac
 
 When an era ends, tap that era on the game screen and photograph the board; the app scores every link tile for you. The rail era appears once the canal era has been scored. The scanner recognizes the board with OpenCV.js (ORB feature matching), finds the link tiles and their player colors, and applies the rulebook's link scoring over the full Birmingham map graph. Both the day and night sides of the board are supported. Anything the classifier isn't sure about is shown for a quick manual check before the totals.
 
+Reflections are the scanner's weak spot. A lamp bouncing off the glossy tiles washes their color out, and the scanner will then ask you about those links, or at worst read a tile as empty. So look through the camera before you shoot: if there's a sheen anywhere on the board, move until it's gone. Turning to a different angle often leaves the sheen where it was, because what moves it is your position relative to the light. Indoor light at night leaves more links for the manual check than daylight does. The last screen puts every link on the board image so you can compare with the real thing before the totals.
+
 The whole pipeline runs in your browser. The photo is processed on your device and never uploaded anywhere.
 
 Confirmed links are shared with everyone in the game: every phone gets a live score screen where anyone can enter the icon counts, correct a link's owner, and watch the totals update in real time, just like the shared money counters. Only the link assignments and icon counts are synced; the photo itself stays on the device that took it.

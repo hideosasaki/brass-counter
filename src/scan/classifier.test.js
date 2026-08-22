@@ -15,7 +15,11 @@ import {
   isGlare,
   GLARE_CORR,
   GLARE_MIN_CELLS,
+  GLARE_MAX_CELLS,
   NEUTRAL_MIN_LIFT,
+  RESIDUE_MAX_FRAC,
+  WASHOUT_MIN_LIFT,
+  WASHOUT_MAX_DIST,
   PATCH_HALF,
   CELL,
   ALIGN_MARGIN,
@@ -189,6 +193,28 @@ describe("splitComponents", () => {
     const [comp] = splitComponents(small);
     expect(isGlare(comp)).toBe(false);
   });
+
+  // A component covering most of the patch is mostly board, so its luma tracks
+  // the reference by construction and the correlation says nothing about what
+  // fired the diff. Measured: night photos where the whole patch went bright
+  // produced 385-500 cell components at corr 0.58-0.68 over real tiles, and
+  // those links read empty. The largest component the six day-lit photos ever
+  // dropped was 111 cells, so the cut has room either side.
+  test("a component spanning most of the patch is judged by size, not corr", () => {
+    const wide = [];
+    for (let i = 0; i < GLARE_MAX_CELLS + 1; i++) {
+      wide.push(cell((i % 25) * CELL, ((i / 25) | 0) * CELL, 100 + i, 40 + i));
+    }
+    const [comp] = splitComponents(wide);
+    expect(comp.cells.length).toBeGreaterThan(GLARE_MAX_CELLS);
+    expect(comp.corr).toBeGreaterThan(GLARE_CORR);
+    expect(isGlare(comp)).toBe(false);
+  });
+
+  test("the size cut clears both measured populations", () => {
+    expect(GLARE_MAX_CELLS).toBeGreaterThan(111); // largest day-lit drop
+    expect(GLARE_MAX_CELLS).toBeLessThan(385); // smallest real tile lost to it
+  });
 });
 
 describe("decideLink", () => {
@@ -263,6 +289,68 @@ describe("decideLink", () => {
     // brightness is a veto here, not a second opinion.
     expect(call(-2, ["pink", "yellow"])).toMatchObject({ color: null, state: "auto" });
     expect(call(NEUTRAL_MIN_LIFT + 10, ["pink", "yellow"]).color).toBe(null);
+  });
+
+  // Reading a colorless dim blob as print holds only while the blob is the size
+  // print residue comes in. Indoor light at night washes a tile's color out
+  // while brightening the board around it, so lift stays low and the blob lands
+  // here - and it was answered empty, silently, on tiles covering half the
+  // band. Measured: real tiles lost this way read frac 0.47 to 0.56, while
+  // displaced print and fold ghosts on provably empty board never passed 0.30.
+  test("a colorless blob too big to be print is asked about, not answered", () => {
+    const colorless = [[150, 148, 150], [152, 150, 151]];
+    const call = (frac) =>
+      decideLink({ results: [{ frac, masked: colorless, lift: -4 }], allowed: ["white", "pink"], side: "day" });
+    expect(call(0.3)).toMatchObject({ color: null, state: "auto" });
+    expect(call(RESIDUE_MAX_FRAC + 0.05)).toMatchObject({ color: null, state: "review" });
+  });
+
+  test("the residue size cut clears both measured populations", () => {
+    expect(RESIDUE_MAX_FRAC).toBeGreaterThan(0.3); // largest blob on empty board
+    expect(RESIDUE_MAX_FRAC).toBeLessThan(0.47); // smallest real tile lost to it
+  });
+
+  // Indoor light at night puts a bright patch over one corner of the board, and
+  // inside it a tile's chroma slides toward neutral until it lands on whichever
+  // color sits nearest neutral - measured on a red tile answered pink, and a
+  // yellow one answered white. Both were confident. The patch's own brightness
+  // against the rest of the scan is what marks the region out; the colors that
+  // slide can only be the near-neutral ones, so a saturated answer in the same
+  // patch is left alone.
+  test("a pale reading in a washed-out patch is asked about", () => {
+    const white = [[172, 170, 172], [174, 172, 173]];
+    const call = (masked, patchLift, side = "day") =>
+      decideLink({
+        results: [{ frac: 0.55, masked, lift: 30, medDy: patchLift }],
+        allowed: ["white", "pink", "yellow", "red"],
+        side,
+        scanLift: 0,
+      });
+    expect(call(white, 0)).toMatchObject({ color: "white", state: "auto" });
+    expect(call(white, WASHOUT_MIN_LIFT + 5)).toMatchObject({ color: "white", state: "review" });
+    // A reading with saturation left cannot have been produced by washing out,
+    // so it keeps its answer in the very same patch.
+    const yellow = [[196, 164, 90], [198, 166, 92]];
+    expect(call(yellow, WASHOUT_MIN_LIFT + 5)).toMatchObject({ color: "yellow", state: "auto" });
+    // Both board sides: the night prototypes sit closer together, and the veto
+    // is on the reading rather than on which color it matched, so the same
+    // reading has to behave the same way on either.
+    expect(call(white, WASHOUT_MIN_LIFT + 5, "night")).toMatchObject({ state: "review" });
+    expect(call(yellow, WASHOUT_MIN_LIFT + 5, "night")).toMatchObject({ state: "auto" });
+    // An unmeasured patch brightness must not create questions of its own.
+    expect(
+      decideLink({
+        results: [{ frac: 0.55, masked: white, lift: 30 }],
+        allowed: ["white", "pink"], side: "day",
+      })
+    ).toMatchObject({ color: "white", state: "auto" });
+  });
+
+  test("the washed-out cuts sit between the measured populations", () => {
+    expect(WASHOUT_MIN_LIFT).toBeGreaterThan(44.0); // brightest patch that answered correctly
+    expect(WASHOUT_MIN_LIFT).toBeLessThan(48.1); // dimmest patch that answered wrong
+    expect(WASHOUT_MAX_DIST).toBeGreaterThan(0.052); // palest reading that answered wrong
+    expect(WASHOUT_MAX_DIST).toBeLessThan(0.07); // a real yellow tile's own saturation
   });
 
   // Something is covering this link, it is roughly the right sort of color for

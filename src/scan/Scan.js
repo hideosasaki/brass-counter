@@ -205,6 +205,8 @@ function Scan() {
             <ul className="mb-2 text-secondary">
               <li>Any angle works, top-down is best</li>
               <li>Good light, no hands over the board</li>
+              <li>No lamp reflecting off the tiles: if you see a sheen, move
+                until it's gone</li>
             </ul>
             <div className="small text-body-secondary">
               The photo is processed on your device and never uploaded.
