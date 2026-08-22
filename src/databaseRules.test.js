@@ -2,6 +2,7 @@
 // pinned here instead of by a comment. A miss shows up as a rejected write on
 // a rare path (the undo node especially), which is hard to notice by hand.
 import rules from "../database.rules.json";
+import { generateGameId } from "./gameId";
 import { MAX_LINK_ICONS } from "./linkScoreData";
 import { PLAYER_TOKEN_CLASSES, initialPlayer } from "./playerDefaults";
 import { ERAS } from "./eras";
@@ -49,6 +50,18 @@ describe("database.rules.json mirrors the app's constants", () => {
     expect(
       accepted(game.undo.action[".validate"], /newData\.val\(\) == '(\w+)'/g)
     ).toEqual(Object.keys(UNDO_LABELS).sort());
+  });
+
+  // An id the rules reject is invisible from inside the app: the writes just
+  // never land, and a fresh game looks like it did nothing.
+  test("generated game ids match the id pattern the rules enforce", () => {
+    // Reading and writing a game are gated by the same id, so the two
+    // conditions drifting apart would let a game be written but never read.
+    expect(game[".read"]).toBe(game[".write"]);
+    const pattern = new RegExp(game[".write"].match(/matches\(\/(.+)\/\)/)[1]);
+    for (let i = 0; i < 20; i++) {
+      expect(generateGameId()).toMatch(pattern);
+    }
   });
 
   // The player node is closed ($other: false), so a field added to a player

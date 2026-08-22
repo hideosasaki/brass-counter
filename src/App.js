@@ -6,17 +6,22 @@ import { isEra } from "./eras";
 
 const Scan = lazy(() => import("./scan/Scan"));
 const LinkScore = lazy(() => import("./LinkScore"));
+// Lazy so the QR encoder is downloaded by the players who open the lobby, not
+// on every first paint.
+const Invite = lazy(() => import("./Invite"));
+
+const LazyScreen = ({ children }) => (
+  <Suspense fallback={<div className="container mt-3">Loading...</div>}>
+    {children}
+  </Suspense>
+);
 
 // Both era screens write to linkScore/{era}, so a URL naming anything else is
 // a bad address: it never reaches them and the screens can trust their era.
 function EraScreen({ children }) {
   const { gameId, era } = useParams();
   if (!isEra(era)) return <Navigate to={`/game/${gameId}`} replace />;
-  return (
-    <Suspense fallback={<div className="container mt-3">Loading...</div>}>
-      {children}
-    </Suspense>
-  );
+  return <LazyScreen>{children}</LazyScreen>;
 }
 
 function App() {
@@ -24,6 +29,14 @@ function App() {
     <Routes>
       <Route path="/" element={<Home />} />
       <Route path="/game/:gameId" element={<Game />} />
+      <Route
+        path="/game/:gameId/invite"
+        element={
+          <LazyScreen>
+            <Invite />
+          </LazyScreen>
+        }
+      />
       <Route
         path="/game/:gameId/scan/:era"
         element={

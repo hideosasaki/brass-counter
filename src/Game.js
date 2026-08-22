@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from "react";
-import { useParams, useNavigate } from "react-router-dom";
+import { Link, useParams, useNavigate } from "react-router-dom";
 import { database, updateGame } from "./firebaseConfig";
 import { ref, onValue } from "firebase/database";
 import { incomeLevelFromSpace, highestSpaceOfLevel } from "./income";
@@ -35,7 +35,6 @@ function Game() {
   const [players, setPlayers] = useState([]);
   const [linkScore, setLinkScore] = useState(null);
   const [loading, setLoading] = useState(true);
-  const [copied, setCopied] = useState(false);
   const [undoInfo, setUndoInfo] = useState(null);
   const [scoreToast, setScoreToast] = useState(null); // era string
   const prevLinkScore = useRef(undefined); // undefined until first snapshot
@@ -218,51 +217,17 @@ function Game() {
     );
   };
 
-  // Hand the game URL to the other players: the OS share sheet where
-  // available (phones), otherwise copy the link to the clipboard. Both APIs
-  // need https; on plain http the button does nothing, which is fine for a
-  // dev server.
-  const shareGame = () => {
-    const url = window.location.href;
-    if (navigator.share) {
-      navigator.share({ title: `Brass Game ${gameId}`, url }).catch(() => {});
-    } else if (navigator.clipboard) {
-      navigator.clipboard.writeText(url).then(() => {
-        setCopied(true);
-        setTimeout(() => setCopied(false), 1500);
-      });
-    }
-  };
-
   return (
     <div className="container">
       <div className="row align-items-center mb-2 mt-2">
         <div className="col-auto fs-2 pe-0">Game {gameId}</div>
         <div className="col-auto">
-          <button
-            className="btn p-1 text-secondary"
-            aria-label="Share game link"
-            onClick={shareGame}
+          <Link
+            to={`/game/${gameId}/invite`}
+            className="btn btn-sm btn-outline-secondary"
           >
-            {copied ? (
-              <span className="small">Copied</span>
-            ) : (
-              <svg
-                width="26"
-                height="26"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="2"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-              >
-                <path d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8" />
-                <polyline points="16 6 12 2 8 6" />
-                <line x1="12" y1="2" x2="12" y2="15" />
-              </svg>
-            )}
-          </button>
+            Invite
+          </Link>
         </div>
       </div>
 
@@ -405,6 +370,11 @@ function Game() {
       )}
       <div className="clearfix pt-4 pb-3">
         <DonateLink />
+      </div>
+      <div className="text-center pb-4">
+        <Link to="/" className="link-secondary small">
+          Home
+        </Link>
       </div>
       {/* One bottom-anchored stack, so several live toasts stack by layout
           instead of each one knowing the others' heights. */}
