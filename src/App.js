@@ -2,6 +2,7 @@ import React, { Suspense, lazy } from "react";
 import { Routes, Route, Navigate, useParams } from "react-router-dom";
 import Home from "./Home";
 import Game from "./Game";
+import Loading from "./Loading";
 import { isEra } from "./eras";
 
 const Scan = lazy(() => import("./scan/Scan"));
@@ -11,9 +12,7 @@ const LinkScore = lazy(() => import("./LinkScore"));
 const Invite = lazy(() => import("./Invite"));
 
 const LazyScreen = ({ children }) => (
-  <Suspense fallback={<div className="container mt-3">Loading...</div>}>
-    {children}
-  </Suspense>
+  <Suspense fallback={<Loading />}>{children}</Suspense>
 );
 
 // Both era screens write to linkScore/{era}, so a URL naming anything else is

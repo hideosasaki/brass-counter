@@ -15,6 +15,7 @@ import {
 import { ownedLinksFromPayload, MAX_LINK_ICONS } from "./linkScoreData";
 import { eraTitle } from "./eras";
 import DonateLink from "./DonateLink";
+import Loading from "./Loading";
 import "bootstrap/dist/css/bootstrap.min.css";
 
 // The shared score screen: one live view of a scanned era result that every
@@ -122,7 +123,7 @@ function LinkScore() {
   );
 
   if (!players || payload === undefined)
-    return <div className="container mt-3">Loading...</div>;
+    return <Loading />;
 
   if (!payload) {
     return (

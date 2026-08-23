@@ -7,6 +7,7 @@ import { PLAYER_COLORS, initialPlayer, playersByIndex } from "./playerDefaults";
 import { ERA_LABELS, ERAS } from "./eras";
 import { UNDO_LABELS } from "./undoActions";
 import DonateLink from "./DonateLink";
+import Loading from "./Loading";
 import "bootstrap/dist/css/bootstrap.min.css";
 
 const MAX_PLAYERS = 4;
@@ -98,7 +99,7 @@ function Game() {
   }, [scoreToast]);
 
   if (loading) {
-    return <div>Loading...</div>;
+    return <Loading />;
   }
 
   // The canal era always comes first, so its result standing in the database

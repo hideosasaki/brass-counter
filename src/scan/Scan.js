@@ -14,6 +14,7 @@ import { linksFromAssignments } from "../linkScoreData";
 import { eraTitle } from "../eras";
 import { detectedPoint, CANONICAL_SIZE } from "./classifier";
 import { ensureEngine, scanPhoto, ScanError } from "./pipeline";
+import Loading from "../Loading";
 import "bootstrap/dist/css/bootstrap.min.css";
 
 const STAGES = [
@@ -182,7 +183,7 @@ function Scan() {
     </div>
   );
 
-  if (!players) return <div className="container mt-3">Loading...</div>;
+  if (!players) return <Loading />;
 
   // ---- setup -------------------------------------------------------------
   if (phase === "setup") {
