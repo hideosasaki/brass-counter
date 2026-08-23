@@ -47,7 +47,7 @@ To self-host, create your own Firebase project (Realtime Database + Hosting), re
 
 ## Support
 
-Brass Counter is free and has no server costs to cover. If it made your game night easier, you can [buy me a coffee](https://ko-fi.com/hideosasaki).
+Brass Counter is free and has no server costs to cover. Next time you're getting drinks for the table, you can [add a coffee for me](https://ko-fi.com/hideosasaki).
 
 ## License
 

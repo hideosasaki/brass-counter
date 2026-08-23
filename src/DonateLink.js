@@ -8,9 +8,15 @@ const KOFI_URL = "https://ko-fi.com/hideosasaki";
 // would run on every page load for a button pressed once in a hundred games.
 const KOFI_WIDGET_URL = `${KOFI_URL}/?hidefeed=true&widget=true&embed=true&preview=true`;
 
-// Ko-fi's own button artwork, served from public/ rather than their CDN so
-// the page makes no third-party request until the reader asks for one.
-const KOFI_BUTTON = `${process.env.PUBLIC_URL}/kofi-button.png`;
+// Ko-fi's cup mark, served from public/ rather than their CDN so the page
+// makes no third-party request until the reader asks for one. Their own
+// button script squeezes it to 22x15; this is its true ratio, which their
+// brand terms ask for. The button around it is theirs too, rebuilt here:
+// the script that draws it calls document.writeln, which would blank an
+// already-loaded page, and it navigates away instead of opening the dialog.
+const KOFI_CUP = `${process.env.PUBLIC_URL}/kofi-cup.png`;
+// The orange of Ko-fi's own button artwork, read out of that PNG's palette.
+const KOFI_ORANGE = "#ff6433";
 
 function DonateLink() {
   const [open, setOpen] = useState(false);
@@ -34,15 +40,17 @@ function DonateLink() {
   return (
     <div className="text-center">
       <p className="text-body-secondary small mb-2">
-        Brass Counter is free and always will be. If it made your game night
-        easier:
+        Brass Counter is free and always will be. Next time you're getting
+        drinks for the table:
       </p>
       <button
         type="button"
-        className="btn p-0 border-0 bg-transparent"
+        className="btn fw-bold text-white d-inline-flex align-items-center gap-2"
+        style={{ backgroundColor: KOFI_ORANGE }}
         onClick={() => setOpen(true)}
       >
-        <img src={KOFI_BUTTON} width="143" height="36" alt="Buy me a coffee" />
+        <img src={KOFI_CUP} width="22" height="18" alt="" />
+        Add a coffee for me
       </button>
 
       {open && (
