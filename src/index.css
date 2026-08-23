@@ -28,6 +28,30 @@ body {
   fill: #fff;
 }
 
+/* The Ko-fi tip form is a foreign document, so it gets a dialog of its own
+   rather than a panel painted over the page. Stripping the frame off leaves
+   the dialog as bare geometry; 480px is the content width the rest of the
+   app uses. The browser's own backdrop is too faint to read the board as
+   dismissed, hence the explicit dim. */
+/* Bootstrap's d-flex would win over the closed dialog's display: none, so the
+   column lives here, behind [open], instead of on the element. */
+.kofi-dialog[open] {
+  display: flex;
+  flex-direction: column;
+}
+.kofi-dialog {
+  width: min(480px, 100% - 1rem);
+  max-width: none;
+  height: min(48rem, 100% - 1rem);
+  max-height: none;
+  padding: 0;
+  border: 0;
+  background: transparent;
+}
+.kofi-dialog::backdrop {
+  background-color: rgba(0, 0, 0, 0.5);
+}
+
 code {
   font-family: source-code-pro, Menlo, Monaco, Consolas, 'Courier New',
     monospace;

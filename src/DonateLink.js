@@ -1,26 +1,88 @@
-import React from "react";
+import React, { useEffect, useRef, useState } from "react";
 
 const KOFI_URL = "https://ko-fi.com/hideosasaki";
 
-// Ko-fi's brand red; inline colors keep the button identical in both themes
-const KOFI_BG = "#ff5e5b";
+// The same page stripped to the tip form: no feed, no gallery, no profile
+// header. Ko-fi publishes this URL for embedding, and it is what their own
+// widget script loads, so we point an iframe at it and skip the script, which
+// would run on every page load for a button pressed once in a hundred games.
+const KOFI_WIDGET_URL = `${KOFI_URL}/?hidefeed=true&widget=true&embed=true&preview=true`;
+
+// Ko-fi's own button artwork, served from public/ rather than their CDN so
+// the page makes no third-party request until the reader asks for one.
+const KOFI_BUTTON = `${process.env.PUBLIC_URL}/kofi-button.png`;
 
 function DonateLink() {
+  const [open, setOpen] = useState(false);
+  const dialog = useRef(null);
+  const close = () => dialog.current.close();
+
+  useEffect(() => {
+    if (!open) return;
+    // showModal is the whole reason this is a dialog: the top layer, the
+    // backdrop, Escape, and keeping Tab inside the panel all come with it.
+    dialog.current.showModal();
+    // Scroll containment does not, and the board scrolls behind the panel
+    // on touch devices without this.
+    const { overflow } = document.body.style;
+    document.body.style.overflow = "hidden";
+    return () => {
+      document.body.style.overflow = overflow;
+    };
+  }, [open]);
+
   return (
     <div className="text-center">
       <p className="text-body-secondary small mb-2">
         Brass Counter is free and always will be. If it made your game night
         easier:
       </p>
-      <a
-        className="btn rounded-pill px-4"
-        style={{ backgroundColor: KOFI_BG, color: "#fff" }}
-        href={KOFI_URL}
-        target="_blank"
-        rel="noreferrer"
+      <button
+        type="button"
+        className="btn p-0 border-0 bg-transparent"
+        onClick={() => setOpen(true)}
       >
-        ☕ Buy me a coffee
-      </a>
+        <img src={KOFI_BUTTON} width="143" height="36" alt="Buy me a coffee" />
+      </button>
+
+      {open && (
+        <dialog
+          ref={dialog}
+          className="kofi-dialog"
+          aria-label="Support Brass Counter on Ko-fi"
+          onClose={() => setOpen(false)}
+          onClick={(event) => {
+            if (event.target === dialog.current) close();
+          }}
+        >
+          {/* Ko-fi is a third party inside an iframe, so a blocker or a cookie
+              policy can leave the frame empty. The way out shares the close
+              button's row, because a line of its own is a line the tip form
+              loses and it starts scrolling. */}
+          <div className="d-flex align-items-center gap-3 mb-1">
+            <a
+              className="link-light small text-truncate"
+              href={KOFI_URL}
+              target="_blank"
+              rel="noreferrer"
+            >
+              Not loading? Open in a new tab
+            </a>
+            <button
+              type="button"
+              className="btn-close btn-close-white ms-auto flex-shrink-0"
+              aria-label="Close"
+              onClick={close}
+            ></button>
+          </div>
+          <iframe
+            className="rounded-4 bg-white border-0 flex-fill"
+            style={{ minHeight: 0 }}
+            src={KOFI_WIDGET_URL}
+            title="Ko-fi tip form"
+          ></iframe>
+        </dialog>
+      )}
     </div>
   );
 }
