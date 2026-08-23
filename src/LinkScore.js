@@ -2,11 +2,17 @@ import React, { useEffect, useMemo, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { ref, onValue } from "firebase/database";
 import { database, updateGame } from "./firebaseConfig";
-import { LINKS, MERCHANTS, LINKS_BY_ID, LOCATIONS, REGION_ORDER } from "./boardData";
+import {
+  LINKS,
+  MERCHANTS,
+  LINKS_BY_ID,
+  LOCATIONS,
+  REGION_COLORS,
+  REGION_ORDER,
+} from "./boardData";
 import { scoreLinksFromIcons, linkVpFromIcons } from "./scoring";
 import {
   CLASS_HEX,
-  LocationName,
   LinkName,
   linkLabel,
   sessionClassesOf,
@@ -26,6 +32,42 @@ import "bootstrap/dist/css/bootstrap.min.css";
 //
 // Edits are single-path writes (one link, one location count), so two people
 // correcting different things at the same time merge instead of clobbering.
+// One location's icon count, on a row wearing that location's region color.
+// Both the color and the foreground come from the board data, so a region whose
+// name banner is light would still read; see index.css for what the two fixed
+// overlays assume.
+function IconRow({ loc, count, onStep }) {
+  const { name, region } = LOCATIONS[loc];
+  const { bg, fg } = REGION_COLORS[region];
+  return (
+    <div
+      className="icon-row d-flex justify-content-between align-items-center rounded mb-2 ps-3 pe-2 py-1"
+      style={{ backgroundColor: bg, color: fg }}
+    >
+      <span className="name text-uppercase small fw-semibold">{name}</span>
+      <span className="d-flex align-items-center gap-1">
+        <button
+          type="button"
+          className="btn step"
+          aria-label={`One fewer link icon in ${name}`}
+          onClick={() => onStep(-1)}
+        >
+          −
+        </button>
+        <span className="count text-center fs-5 fw-bold py-1">{count}</span>
+        <button
+          type="button"
+          className="btn step"
+          aria-label={`One more link icon in ${name}`}
+          onClick={() => onStep(1)}
+        >
+          +
+        </button>
+      </span>
+    </div>
+  );
+}
+
 function LinkScore() {
   const { gameId, era } = useParams();
   const navigate = useNavigate();
@@ -92,6 +134,11 @@ function LinkScore() {
   const write = (path, value) =>
     updateGame(gameId, { [`linkScore/${era}/${path}`]: value });
   const setIconCount = (loc, n) => write(`icons/${loc}`, n);
+  const stepIcons = (loc, delta) =>
+    setIconCount(
+      loc,
+      Math.min(MAX_LINK_ICONS, Math.max(0, (icons[loc] || 0) + delta))
+    );
   const setOwner = (linkId, cls) => {
     write(`links/${linkId}`, cls); // null deletes = Empty
     setEditingLink(null);
@@ -172,30 +219,12 @@ function LinkScore() {
         at the same time, each on their own device.
       </p>
       {iconLocations.map((loc) => (
-        <div key={loc} className="card mb-2">
-          <div className="card-body d-flex justify-content-between align-items-center py-2">
-            <span><LocationName id={loc} /></span>
-            <span className="btn-group">
-              <button
-                className="btn btn-outline-secondary"
-                onClick={() => setIconCount(loc, Math.max(0, (icons[loc] || 0) - 1))}
-              >
-                −
-              </button>
-              <span className="btn border pe-none" style={{ minWidth: 44 }}>
-                {icons[loc] || 0}
-              </span>
-              <button
-                className="btn btn-secondary"
-                onClick={() =>
-                  setIconCount(loc, Math.min(MAX_LINK_ICONS, (icons[loc] || 0) + 1))
-                }
-              >
-                +
-              </button>
-            </span>
-          </div>
-        </div>
+        <IconRow
+          key={loc}
+          loc={loc}
+          count={icons[loc] || 0}
+          onStep={(delta) => stepIcons(loc, delta)}
+        />
       ))}
 
       <details className="mt-3 mb-3">

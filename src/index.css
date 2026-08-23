@@ -28,6 +28,53 @@ body {
   fill: #fff;
 }
 
+/* A score-screen row is painted with its region's own color, so the name needs
+   no plate of its own and the controls have to work on all six. Merchants own
+   the one light background and never reach this list, which is what lets these
+   two overlays be fixed: a white wash for the buttons, a darker well for the
+   count so the number players scan down the list separates from the controls
+   instead of reading as a third one. Both stay literal because neither derives
+   from the row's foreground by any honest rule. Hovering darkens rather than
+   lightens, which is the direction that makes a white glyph easier to read.
+   44px is the touch target the row is sized around, and the glyph is large and
+   bold enough to be legible at the wash's contrast.
+
+   The active colors are pinned as Bootstrap's own variables, not as plain
+   properties: .btn leaves them undefined, and .btn:first-child:active would
+   outrank a single class, so a pressed button would drop to the theme's body
+   color, which under a light theme is dark ink on a dark row. */
+.icon-row .name {
+  letter-spacing: 0.03em;
+}
+.icon-row .step {
+  --bs-btn-color: inherit;
+  --bs-btn-bg: rgba(255, 255, 255, 0.2);
+  --bs-btn-border-color: transparent;
+  --bs-btn-hover-color: inherit;
+  --bs-btn-hover-bg: rgba(0, 0, 0, 0.18);
+  --bs-btn-hover-border-color: transparent;
+  --bs-btn-active-color: inherit;
+  --bs-btn-active-bg: rgba(0, 0, 0, 0.3);
+  --bs-btn-active-border-color: transparent;
+  width: 44px;
+  height: 44px;
+  padding: 0;
+  border-radius: 8px;
+  font-size: 1.25rem;
+  font-weight: 700;
+  line-height: 1;
+}
+.icon-row .step:focus-visible {
+  box-shadow: none;
+  outline: 2px solid currentColor;
+  outline-offset: 2px;
+}
+.icon-row .count {
+  min-width: 44px;
+  border-radius: 8px;
+  background-color: rgba(0, 0, 0, 0.28);
+}
+
 /* The Ko-fi tip form is a foreign document, so it gets a dialog of its own
    rather than a panel painted over the page. Stripping the frame off leaves
    the dialog as bare geometry; 480px is the content width the rest of the

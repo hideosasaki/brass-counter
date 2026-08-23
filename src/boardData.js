@@ -98,7 +98,7 @@ export const MERCHANTS = {
 
 export const FARM_BREWERIES = {
   farmNorth: { name: "Farm Brewery (Cannock)", region: "farm" },
-  farmSouth: { name: "Farm Brewery (Kidderminster/Worcester)", region: "farm" },
+  farmSouth: { name: "Farm Brewery (Kidderminster / Worcester)", region: "farm" },
 };
 
 // Every location on the board, whatever its kind.
