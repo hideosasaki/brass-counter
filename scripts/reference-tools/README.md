@@ -90,3 +90,13 @@ question: whether a link reports a tile where there is none.
   past it, so firing there is not by itself a defect. Run it after touching a
   mask, a sample point, or any threshold in the classifier: it is the only
   check that a change has not started inventing tiles, and it needs no photos.
+
+## industry_stats.json
+
+The per-tile numbers transcribed from the rulebook: `vp` is what a flipped tile
+scores, `linkVP` the number of link icons on its face. Nothing reads the file.
+It is here because the transcription took a while and `src/` has no use for it:
+players enter the icon count per location, and reading industry tiles is a
+non-goal. The icons are on the flipped face only, so `linkVP` is a flipped-face
+count, and the code that used to read this table was wrong to apply it to
+unflipped tiles. The column has never been checked against the physical tiles.

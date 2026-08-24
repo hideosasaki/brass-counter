@@ -45,7 +45,7 @@ There are no accounts, so anyone holding a game's six-character id can read and 
 
 ## Board data and scoring
 
-`src/boardData.js` and `src/scoring.js` contain the full Birmingham map graph (20 cities, 5 merchants, 2 farm breweries, 39 links) and an end-of-era scoring engine, cross-checked against the official rulebook. The photo scanner in `src/scan/` builds on them, and `scripts/reference-tools/README.md` covers how the canonical references and link masks were built and how to re-score them against real photos.
+`src/boardData.js` and `src/scoring.js` contain the full Birmingham map graph (20 cities, 5 merchants, 2 farm breweries, 39 links) cross-checked against the official rulebook, plus the end-of-era link scoring built on it. The photo scanner in `src/scan/` builds on them, and `scripts/reference-tools/README.md` covers how the canonical references and link masks were built and how to re-score them against real photos.
 
 Birmingham is the only board supported today, and the blocker is data rather than code. The scanner works from canonical reference images and hand-traced link masks of a physical board, and I don't own Lancashire. A port would need its own map graph, reference images, link masks and player color prototypes. Nothing else in the pipeline is tied to a particular board.
 

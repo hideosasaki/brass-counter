@@ -215,7 +215,7 @@ function LinkScore() {
 
       <h6 className="mt-3">Link icons per location</h6>
       <p className="text-secondary small mb-2">
-        Enter the total of the black hexagon link icons printed on the built
+        Enter the total of the black hexagon link icons showing on the built
         industry tiles in each location. Players can count different locations
         at the same time, each on their own device.
       </p>

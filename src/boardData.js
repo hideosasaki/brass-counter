@@ -3,53 +3,6 @@
 // npow/brass-birmingham implementation: 39 links, 20 cities, 5 merchants,
 // 2 farm breweries.
 
-// Industry tile stats. vp: victory points when flipped; linkVP: number of
-// link icons in the tile's top-right corner (same on both faces, used for
-// link scoring).
-export const INDUSTRY_STATS = {
-  brewery: {
-    1: { vp: 4, linkVP: 2 },
-    2: { vp: 5, linkVP: 2 },
-    3: { vp: 7, linkVP: 2 },
-    4: { vp: 10, linkVP: 2 },
-  },
-  coalMine: {
-    1: { vp: 1, linkVP: 2 },
-    2: { vp: 2, linkVP: 1 },
-    3: { vp: 3, linkVP: 1 },
-    4: { vp: 4, linkVP: 1 },
-  },
-  cottonMill: {
-    1: { vp: 5, linkVP: 1 },
-    2: { vp: 5, linkVP: 2 },
-    3: { vp: 9, linkVP: 1 },
-    4: { vp: 12, linkVP: 1 },
-  },
-  ironWorks: {
-    1: { vp: 3, linkVP: 1 },
-    2: { vp: 5, linkVP: 1 },
-    3: { vp: 7, linkVP: 1 },
-    4: { vp: 9, linkVP: 1 },
-  },
-  manufacturer: {
-    1: { vp: 3, linkVP: 2 },
-    2: { vp: 5, linkVP: 1 },
-    3: { vp: 4, linkVP: 0 },
-    4: { vp: 3, linkVP: 1 },
-    5: { vp: 8, linkVP: 2 },
-    6: { vp: 7, linkVP: 1 },
-    7: { vp: 9, linkVP: 0 },
-    8: { vp: 11, linkVP: 1 },
-  },
-  pottery: {
-    1: { vp: 10, linkVP: 1 },
-    2: { vp: 1, linkVP: 1 },
-    3: { vp: 11, linkVP: 1 },
-    4: { vp: 1, linkVP: 1 },
-    5: { vp: 20, linkVP: 1 },
-  },
-};
-
 // region matches the color of the city's name banner printed on the board.
 export const CITIES = {
   belper: { name: "Belper", region: "derbyshire" },
