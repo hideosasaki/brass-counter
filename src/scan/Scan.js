@@ -2,7 +2,7 @@ import React, { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { ref, get } from "firebase/database";
 import { database, updateGame } from "../firebaseConfig";
-import { LINKS } from "../boardData";
+import { LINKS, linkInEra } from "../boardData";
 import {
   CLASS_HEX,
   LinkName,
@@ -288,15 +288,7 @@ function Scan() {
           style={{ maxHeight: "40vh", objectFit: "cover" }}
         />
         <div className="fw-bold fs-5"><LinkName linkId={linkId} /></div>
-        {linkResultById[linkId]?.eraValid === false ? (
-          <div className="alert alert-warning py-2 my-2">
-            This link cannot be built in the {era} era. If a tile is shown here,
-            it probably belongs to a neighbouring link — choose Empty and assign
-            it on the map. Only pick a color if it was really built here.
-          </div>
-        ) : (
-          <div className="text-secondary mb-2">Whose link is this?</div>
-        )}
+        <div className="text-secondary mb-2">Whose link is this?</div>
         {colorButtons(linkId)}
       </div>
     );
@@ -319,7 +311,9 @@ function Scan() {
         </p>
         <div className="position-relative mb-3">
           <img src={boardUrl} alt="board" className="w-100 rounded" />
-          {LINKS.map((link) => {
+          {/* Only links this era has: nothing can be built on the others, so
+              a dot there is a place to tap a link into the score by mistake. */}
+          {LINKS.filter((link) => linkInEra(link, era)).map((link) => {
             const [nx, ny] = detectedPoint(link.id, linkResultById[link.id]);
             const cls = assignments[link.id];
             return (

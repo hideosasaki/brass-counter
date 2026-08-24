@@ -163,3 +163,10 @@ export const LINKS = [
 ];
 
 export const LINKS_BY_ID = Object.fromEntries(LINKS.map((l) => [l.id, l]));
+
+// Whether a link can be built in the given era. Named rather than spelled out
+// at each call site so the rule stays greppable: it decides what the scanner
+// reads, what its map screen lets a player tap, and what the score screen
+// offers to add, and a place that forgets to ask puts a link on the board that
+// cannot exist.
+export const linkInEra = (link, era) => !!link[era];

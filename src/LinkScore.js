@@ -4,6 +4,7 @@ import { ref, onValue } from "firebase/database";
 import { database, updateGame } from "./firebaseConfig";
 import {
   LINKS,
+  linkInEra,
   MERCHANTS,
   LINKS_BY_ID,
   LOCATIONS,
@@ -124,7 +125,7 @@ function LinkScore() {
   const addableLinks = useMemo(
     () =>
       LINKS.filter(
-        (l) => l[era] && !ownedLinks.some(({ linkId }) => linkId === l.id)
+        (l) => linkInEra(l, era) && !ownedLinks.some(({ linkId }) => linkId === l.id)
       ),
     [ownedLinks, era]
   );

@@ -5,7 +5,7 @@
 import { LINKS } from "../boardData";
 import {
   CANONICAL_SIZE as S,
-  ERA_REVIEW_MIN_FRAC,
+  DETECT_MIN_FRAC,
   PROTOS,
   TILE_R,
   cellGrid,
@@ -45,10 +45,11 @@ function makeBoard() {
   return { data, width: S, height: S };
 }
 
-// A token of one of the session colors, as a disc of the given radius. The
+// A token of one of the session colors, as a tile-sized disc. The
 // chromaticity is the prototype's, so a correctly read tile lands on its color
 // with no margin to spare for the test to be lucky about.
-function paintTile(img, [cx, cy], color, radius = TILE_R) {
+function paintTile(img, [cx, cy], color) {
+  const radius = TILE_R;
   const [u, v] = PROTOS.day[color];
   const sum = 600;
   const rgb = [u * sum, v * sum, (1 - u - v) * sum];
@@ -147,24 +148,17 @@ describe("classifyAllLinks", () => {
     expect(notEmpty(results, CANAL_ONLY)).toEqual([]);
   });
 
-  // Nothing can be placed on a link the era does not have, so a reading there
-  // is either a neighbour's tile reaching in - which a person has to sort out -
-  // or the printed board showing through, which is not worth a question.
-  test("a link this era does not have is never given a color", () => {
+  // Nothing can be placed on a link the era does not have, so whatever is read
+  // there - a neighbour's tile reaching in, the printed board showing through,
+  // something a player parked on a closed link - is answered empty, and no
+  // question is put about a stretch of board that cannot hold a tile.
+  test("a link this era does not have is answered empty without asking", () => {
     const photo = copy(board);
     paintTile(photo, samplePointsPx(RAIL_ONLY)[0], "yellow");
     const r = byId(scan(photo), RAIL_ONLY);
-    expect(r.eraValid).toBe(false);
-    expect(r.color).toBeNull();
-    expect(r.frac).toBeGreaterThanOrEqual(ERA_REVIEW_MIN_FRAC);
-    expect(r.state).toBe("review");
-  });
-
-  test("a trace on a link this era does not have is not worth asking about", () => {
-    const photo = copy(board);
-    paintTile(photo, samplePointsPx(RAIL_ONLY)[0], "yellow", 18);
-    const r = byId(scan(photo), RAIL_ONLY);
-    expect(r.frac).toBeLessThan(ERA_REVIEW_MIN_FRAC);
+    // The tile has to have been seen for the answer to mean anything: without
+    // this the test also passes when nothing was detected at all.
+    expect(r.frac).toBeGreaterThanOrEqual(DETECT_MIN_FRAC);
     expect([r.state, r.color]).toEqual(["auto", null]);
   });
 });

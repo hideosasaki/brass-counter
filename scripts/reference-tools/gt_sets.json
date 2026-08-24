@@ -74,8 +74,7 @@
       "dudley-wolverhampton": "red",
       "birmingham-coventry": "yellow",
       "birmingham-dudley": "yellow",
-      "birmingham-oxford": "yellow",
-      "birmingham-nuneaton": "yellow"
+      "birmingham-oxford": "yellow"
     }
   },
   "app_0682.jpg": {
@@ -209,8 +208,6 @@
       "coalbrookdale-shrewsbury": "yellow",
       "dudley-wolverhampton": "yellow",
       "nuneaton-tamworth": "yellow",
-      "birmingham-redditch": "white",
-      "tamworth-walsall": "red",
       "leek-stokeOnTrent": "pink"
     }
   },

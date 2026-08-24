@@ -2,7 +2,7 @@
 // descriptors lazily, rectify a photo into the canonical board frame, and
 // classify every link position. Heavy work runs on the main thread with
 // yields between stages so progress can render.
-import { LINKS } from "../boardData";
+import { LINKS, linkInEra } from "../boardData";
 import {
   CANONICAL_SIZE,
   parseRefBin,
@@ -16,7 +16,6 @@ import {
   estimateChromaOffset,
   estimateScanLift,
   NO_COLOR,
-  ERA_REVIEW_MIN_FRAC,
   PATCH_HALF,
   ALIGN_MARGIN,
 } from "./classifier";
@@ -288,8 +287,8 @@ export function classifyAllLinks(
   // from its confident detections; then decide everything with the tint
   // corrected. A camera or lighting shift measured on one player's tiles
   // fixes the borderline ones of the other players.
-  const firstPass = LINKS.filter((l) => (era === "canal" ? l.canal : l.rail)).map(
-    (link) => decideLink({ results: patchResults[link.id], allowed, side })
+  const firstPass = LINKS.filter((l) => linkInEra(l, era)).map((link) =>
+    decideLink({ results: patchResults[link.id], allowed, side })
   );
   const chromaOffset = estimateChromaOffset(firstPass, side);
   // What a patch's luma offset looks like where nothing is reflecting off the
@@ -298,7 +297,7 @@ export function classifyAllLinks(
   // everywhere.
   const scanLift = estimateScanLift(patchResults);
   return LINKS.map((link) => {
-    const eraValid = era === "canal" ? link.canal : link.rail;
+    const eraValid = linkInEra(link, era);
     const r = decideLink({
       results: patchResults[link.id],
       allowed,
@@ -306,21 +305,12 @@ export function classifyAllLinks(
       chromaOffset,
       scanLift,
     });
+    // A link this era does not have is always empty, whatever was read there,
+    // so it is answered empty and never asked about. The measurement stays
+    // because the map screen places its dot from frac/centroid/shift, and
+    // cuts the edit card's patch from them.
     if (eraValid) return { linkId: link.id, eraValid, ...r };
-    // This link cannot exist this era. A detection with real mass behind it
-    // usually means a neighbouring link's tile drifted -> let the human place
-    // it, so keep the measurement but not the color. Below that mass it is
-    // print showing through, and nothing can be placed here anyway: asking
-    // about a stretch of board that cannot hold a tile is the worst question
-    // this scanner can put, so the answer is empty whatever decideLink made of
-    // the color it read.
-    return {
-      linkId: link.id,
-      eraValid,
-      ...r,
-      ...NO_COLOR,
-      state: r.frac >= ERA_REVIEW_MIN_FRAC ? "review" : "auto",
-    };
+    return { linkId: link.id, eraValid, ...r, ...NO_COLOR, state: "auto" };
   });
 }
 

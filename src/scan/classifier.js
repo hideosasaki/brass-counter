@@ -1,13 +1,13 @@
 // Pure classification logic for the board scanner. Works on ImageData-like
 // objects ({data, width, height} RGBA) in the canonical board frame, so it is
 // unit-testable without OpenCV or a DOM. Method and thresholds were tuned
-// against eight photos of six real board states (312 link positions: 292
-// auto-correct, 20 review, no wrong automatic answers); see
-// scripts/reference-tools/evaluate.mjs.
+// against eight photos of six real board states (262 link positions the
+// scanner decides: 246 auto-correct, 16 review, no wrong automatic answers);
+// see scripts/reference-tools/evaluate.mjs.
 //
 // Six of those photos were taken in daylight. The other two are the same board
-// shot from two directions under indoor light, and every question left is in
-// them. Nothing is answered wrong any more, but read that as the corpus being
+// shot from two directions under indoor light, and all but one of the
+// questions left is in them. Nothing is answered wrong any more, but read that as the corpus being
 // small rather than as the problem being finished: the last three wrong answers
 // were tiles washed colorless and dim, indistinguishable from empty board on
 // every measure the patch itself carries, and what finally caught them was the
@@ -76,14 +76,6 @@ export const AUTO_MIN_MARGIN = { day: 0.02, night: 0.01 };
 // Real tiles measured frac >= 0.17 in ground truth; sub-0.12 detections are
 // noise (glare, print differences) and are dropped without asking.
 export const DETECT_MIN_FRAC = 0.12;
-// Mass at which a detection on a link that cannot exist this era is worth a
-// question (see classifyAllLinks). Nothing can be placed there, so the only
-// reading worth acting on is a tile so badly out of place that it reaches in
-// from next door, which covers 0.3 and up. Print showing through these links
-// measured 0.16. Deliberately its own number rather than AUTO_MIN_FRAC, which
-// happens to sit in the same gap: there the comparison means "do not ask", so
-// sharing it would invert on one side every time the other side was tuned.
-export const ERA_REVIEW_MIN_FRAC = 0.2;
 // Brightness over the surrounding board, in 0-255, that a colorless detection
 // has to carry to be a token; and how close to plain neutral counts as
 // colorless. Reasoned about in decideLink. Real white tiles measured lift 16.9
