@@ -273,7 +273,7 @@ function LinkScore() {
       </details>
 
       {/* Rescanning needs the link tiles still on the board, so it is offered
-          before the instruction to clear them, not after. */}
+          before the closing instructions, not after. */}
       <div className="d-grid mb-3">
         <button
           className="btn btn-outline-secondary"
@@ -282,11 +282,26 @@ function LinkScore() {
           Rescan photo
         </button>
       </div>
-      {/* The closing step: named as everyone's last action so it does not read
-          as something to do while counts are still being entered. */}
+      {/* The closing steps: named as everyone's last action so they do not read
+          as something to do while counts are still being entered. A reminder of
+          the rulebook order, not a restatement of it: this screen counts links
+          only, so the industry tiles are the step most easily forgotten. */}
       <div className="alert alert-secondary">
-        Once everyone has finished counting, advance each player's VP marker by
-        their total above, then remove the scored link tiles from the board.
+        <div className="mb-2">Once everyone has finished counting:</div>
+        <ol className="mb-0 ps-3">
+          <li>Advance each player's VP marker by their total above.</li>
+          <li>Score your flipped industry tiles.</li>
+          {era === "canal" ? (
+            <li>
+              Take your canal links back, and remove your Level 1 industry tiles.
+            </li>
+          ) : (
+            <li>
+              Most VP wins; a tie goes to the higher income, then to the most
+              money left.
+            </li>
+          )}
+        </ol>
       </div>
       <div className="d-grid">
         <button className="btn btn-primary" onClick={() => navigate(`/game/${gameId}`)}>
