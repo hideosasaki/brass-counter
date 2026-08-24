@@ -7,6 +7,7 @@ import { MAX_LINK_ICONS } from "./linkScoreData";
 import { PLAYER_TOKEN_CLASSES, initialPlayer } from "./playerDefaults";
 import { ERAS } from "./eras";
 import { UNDO_LABELS } from "./undoActions";
+import { MAX_SLOTS, STALE_MS } from "./gameSlot";
 
 const game = rules.rules.games.$gameId;
 // Each shape is written twice: once for the live node, once for the snapshot
@@ -71,5 +72,30 @@ describe("database.rules.json mirrors the app's constants", () => {
     for (const shape of playerShapes) {
       expect(Object.keys(shape).filter((k) => k !== "$other").sort()).toEqual(fields);
     }
+  });
+
+  // The seat cap only exists in the rules: the app asks for a seat, and this
+  // pattern is the whole of what stops a link that escaped the table from
+  // taking the project's hundred simultaneous connections.
+  test("the presence node offers exactly MAX_SLOTS seats", () => {
+    const validate = rules.rules.presence.$gameId.$slot[".validate"];
+    const pattern = new RegExp(validate.match(/\$slot\.matches\(\/(.+?)\/\)/)[1]);
+    for (let i = 0; i < MAX_SLOTS; i++) {
+      expect(`slot${i}`).toMatch(pattern);
+    }
+    expect(`slot${MAX_SLOTS}`).not.toMatch(pattern);
+  });
+
+  // Seats sit outside the game node, so they need a gate of their own: without
+  // one the closed root rejects every claim and every table reads as full.
+  test("seats are gated by the id of the game they belong to", () => {
+    expect(rules.rules.presence.$gameId[".write"]).toBe(game[".write"]);
+  });
+
+  // A seat whose release never arrived would otherwise be held forever, and
+  // the window the rules allow has to be the one the app was written against.
+  test("an abandoned seat goes stale after STALE_MS", () => {
+    const validate = rules.rules.presence.$gameId.$slot[".validate"];
+    expect(Number(validate.match(/now - (\d+)/)[1])).toBe(STALE_MS);
   });
 });

@@ -2,6 +2,7 @@ import React, { useEffect, useState } from "react";
 import { useLocation } from "react-router-dom";
 import { ref, onValue } from "firebase/database";
 import { database } from "./firebaseConfig";
+import { socketReleased } from "./gameSlot";
 
 // Long enough that the reconnects of an ordinary game night stay silent, short
 // enough that a player staring at a screen that will not load learns why.
@@ -42,10 +43,10 @@ function ConnectionBanner() {
     }
     // Read when the banner is about to show rather than at render: by then the
     // device has settled on whether it has a network at all.
-    const timer = setTimeout(
-      () => setReason(navigator.onLine ? "busy" : "offline"),
-      GRACE_MS
-    );
+    const timer = setTimeout(() => {
+      if (socketReleased()) return;
+      setReason(navigator.onLine ? "busy" : "offline");
+    }, GRACE_MS);
     return () => clearTimeout(timer);
   }, [connected]);
 

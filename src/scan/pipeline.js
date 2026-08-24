@@ -19,6 +19,7 @@ import {
   PATCH_HALF,
   ALIGN_MARGIN,
 } from "./classifier";
+import { loadOpenCV } from "./opencvSource";
 
 const MAX_PHOTO_DIM = 2000;
 const ORB_FEATURES = 20000;
@@ -49,29 +50,6 @@ export function ensureEngine() {
     });
   }
   return enginePromise;
-}
-
-// opencv.js references Node's fs and cannot go through webpack; it is copied
-// into public/scan/ at build time (npm run copy-opencv) and loaded as a
-// plain script. The UMD build exposes a promise-like global `cv`.
-function loadOpenCV() {
-  if (window.cv) return resolveCv(window.cv);
-  return new Promise((resolve, reject) => {
-    const script = document.createElement("script");
-    script.src = `${process.env.PUBLIC_URL}/scan/opencv.js`;
-    script.async = true;
-    script.onload = () => resolveCv(window.cv).then(resolve, reject);
-    script.onerror = () => reject(new Error("failed to load opencv.js"));
-    document.head.appendChild(script);
-  });
-}
-
-async function resolveCv(cv) {
-  if (cv && typeof cv.then === "function") return cv;
-  if (cv && !cv.Mat) {
-    await new Promise((r) => { cv.onRuntimeInitialized = r; });
-  }
-  return cv;
 }
 
 async function loadRef(side) {

@@ -2,6 +2,7 @@ import React, { Suspense, lazy } from "react";
 import { Routes, Route, Navigate, useParams } from "react-router-dom";
 import Home from "./Home";
 import Game from "./Game";
+import GameSession from "./GameSession";
 import Loading from "./Loading";
 import { isEra } from "./eras";
 
@@ -27,31 +28,35 @@ function App() {
   return (
     <Routes>
       <Route path="/" element={<Home />} />
-      <Route path="/game/:gameId" element={<Game />} />
-      <Route
-        path="/game/:gameId/invite"
-        element={
-          <LazyScreen>
-            <Invite />
-          </LazyScreen>
-        }
-      />
-      <Route
-        path="/game/:gameId/scan/:era"
-        element={
-          <EraScreen>
-            <Scan />
-          </EraScreen>
-        }
-      />
-      <Route
-        path="/game/:gameId/score/:era"
-        element={
-          <EraScreen>
-            <LinkScore />
-          </EraScreen>
-        }
-      />
+      {/* The screens of one game are nested so the seat is taken once for the
+          visit: walking between them must not read as a new arrival. */}
+      <Route path="/game/:gameId" element={<GameSession />}>
+        <Route index element={<Game />} />
+        <Route
+          path="invite"
+          element={
+            <LazyScreen>
+              <Invite />
+            </LazyScreen>
+          }
+        />
+        <Route
+          path="scan/:era"
+          element={
+            <EraScreen>
+              <Scan />
+            </EraScreen>
+          }
+        />
+        <Route
+          path="score/:era"
+          element={
+            <EraScreen>
+              <LinkScore />
+            </EraScreen>
+          }
+        />
+      </Route>
       {/* Hosting rewrites unknown paths to index.html rather than serving a
           404, so a truncated link arrives here and needs somewhere to go. */}
       <Route path="*" element={<Navigate to="/" replace />} />

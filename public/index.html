@@ -15,6 +15,9 @@
       manifest.json provides metadata used when your web app is installed on a
       user's mobile device or desktop. See https://developers.google.com/web/fundamentals/web-app-manifest/
     -->
+        <!-- opencv.js comes from here when the scanner starts. Overlapping the
+         handshake with page load keeps it off the front of a 3.7MB download. -->
+    <link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin />
     <link rel="manifest" href="%PUBLIC_URL%/manifest.json" />
     <script>
       // Follow the OS light/dark preference. Bootstrap 5.3 restyles

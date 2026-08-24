@@ -11,6 +11,7 @@ Live at [https://brass-counter.web.app](https://brass-counter.web.app). No accou
 - "Loan" gives the player £30 and drops the income marker three levels. The button does nothing once that would take income below -10
 - "Link scoring (β)" computes end-of-era link points from a photo of the board
 - Game state syncs across devices through Firebase Realtime Database, and each game gets its own six-character id that is the whole URL you share
+- A game holds six devices at once. That's the table plus a spare, and it stops a link that ends up somewhere public from eating the connections the other tables share
 
 ## Link scoring from a photo
 

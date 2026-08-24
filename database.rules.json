@@ -104,6 +104,23 @@
           ".validate": false
         }
       }
+    },
+    "presence": {
+      "$gameId": {
+        ".write": "$gameId.matches(/^[a-z0-9]{6}$/)",
+        "$slot": {
+          ".validate": "$slot.matches(/^slot[0-5]$/) && newData.hasChildren(['id', 'at']) && (!data.exists() || data.child('id').val() == newData.child('id').val() || data.child('at').val() < now - 43200000)",
+          "id": {
+            ".validate": "newData.isString() && newData.val().length <= 40"
+          },
+          "at": {
+            ".validate": "newData.isNumber() && newData.val() == now"
+          },
+          "$other": {
+            ".validate": false
+          }
+        }
+      }
     }
   }
 }

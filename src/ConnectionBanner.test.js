@@ -3,8 +3,10 @@ import { render, screen, act } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 import { onValue } from "firebase/database";
 import ConnectionBanner, { GRACE_MS } from "./ConnectionBanner";
+import { socketReleased } from "./gameSlot";
 
 jest.mock("./firebaseConfig", () => ({ database: {} }));
+jest.mock("./gameSlot", () => ({ socketReleased: jest.fn(() => false) }));
 jest.mock("firebase/database", () => ({
   ref: jest.fn(),
   onValue: jest.fn(() => jest.fn()),
@@ -78,6 +80,18 @@ test("clears itself once the game is reachable again", () => {
   report(false);
   tick(GRACE_MS);
   report(true);
+
+  expect(screen.queryByRole("status")).not.toBeInTheDocument();
+});
+
+// A full table drops the socket on purpose. Warning that the database cannot be
+// reached would then be both wrong and on top of the screen that just explained
+// why.
+test("stays quiet when the app gave the socket up itself", () => {
+  socketReleased.mockReturnValue(true);
+  show();
+  report(false);
+  tick(GRACE_MS);
 
   expect(screen.queryByRole("status")).not.toBeInTheDocument();
 });
