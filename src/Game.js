@@ -3,9 +3,22 @@ import { Link, useParams, useNavigate } from "react-router-dom";
 import { database, updateGame } from "./firebaseConfig";
 import { ref, onValue } from "firebase/database";
 import { incomeLevelFromSpace, highestSpaceOfLevel } from "./income";
-import { PLAYER_COLORS, initialPlayer, playersByIndex } from "./playerDefaults";
+import {
+  PLAYER_COLORS,
+  initialPlayer,
+  playersByIndex,
+  startingRound,
+  moneyMovedThisRound,
+  incomeMovedThisRound,
+} from "./playerDefaults";
 import { ERA_LABELS, ERAS } from "./eras";
 import { UNDO_ACTIONS } from "./undoActions";
+import {
+  tappedByOthers,
+  withChanges,
+  createOwnWrites,
+  CHANGE_HOLD_MS,
+} from "./playerChanges";
 import { TABLE_BANNER_Z, TONE_CLASSES } from "./banners";
 import DonateLink from "./DonateLink";
 import Loading from "./Loading";
@@ -41,10 +54,24 @@ const scrollToTurnOrder = () => {
 // One line of a player card: what the number is, the number, and the controls
 // that move it. The three rows are laid out by a grid on the card body rather
 // than by anything here, so the labels line up and so do the buttons.
-const PlayerRow = ({ label, ariaLabel, value, children }) => (
+const PlayerRow = ({ label, ariaLabel, value, change, since, children }) => (
   <div className="player-row">
     <div className="label text-secondary">{label}</div>
-    <div className="value text-nowrap">{value}</div>
+    {/* Keyed on the moment of the change so a tap arriving while the last one
+        is still lit restarts the wash instead of being swallowed by it. */}
+    <div
+      key={change || "idle"}
+      className={`value text-nowrap${change ? " changed" : ""}`}
+    >
+      {value}
+      {/* Zero is not worth printing: a player who has not moved this number
+          reads the same with nothing there. */}
+      {!!since && (
+        <span className="since badge bg-secondary-subtle text-body position-absolute top-50 end-0 translate-middle-y">
+          {since > 0 ? `+${since}` : since}
+        </span>
+      )}
+    </div>
     <div className="btn-group" role="group" aria-label={ariaLabel || label}>
       {children}
     </div>
@@ -66,7 +93,16 @@ function Game() {
   const [loading, setLoading] = useState(true);
   const [undoInfo, setUndoInfo] = useState(null);
   const [scoreBanner, setScoreBanner] = useState(null); // era string
+  // "index:field" -> when somebody else last moved that number.
+  const [changes, setChanges] = useState({});
   const prevLinkScore = useRef(undefined); // undefined until first snapshot
+  const prevPlayers = useRef(null); // null until the first snapshot
+  const prevUndoAt = useRef(undefined);
+  // What this device has written and is waiting to see come back. A snapshot
+  // carrying our own tap is not news, so it is claimed against this rather
+  // than lit up.
+  const ourOwnWrites = useRef(null);
+  if (!ourOwnWrites.current) ourOwnWrites.current = createOwnWrites();
 
   useEffect(() => {
     if (!gameId) return undefined;
@@ -74,7 +110,18 @@ function Game() {
     const unsubscribe = onValue(gameRef, (snapshot) => {
       if (snapshot.exists()) {
         const data = snapshot.val();
-        setPlayers(data.players ? Object.values(data.players) : []);
+        const nextPlayers = data.players ? Object.values(data.players) : [];
+        setChanges(
+          withChanges(
+            tappedByOthers(prevPlayers.current, nextPlayers, {
+              reordered: data.undo?.at !== prevUndoAt.current,
+              ours: ourOwnWrites.current,
+            })
+          )
+        );
+        prevPlayers.current = nextPlayers;
+        prevUndoAt.current = data.undo?.at;
+        setPlayers(nextPlayers);
         const nextScore = data.linkScore || null;
         setLinkScore(nextScore);
         // Announce when an era's result is first shared while this screen is
@@ -120,6 +167,15 @@ function Game() {
     return () => clearTimeout(timer);
   }, [undoInfo]);
 
+  // One timer for the whole set. Any light arriving while it runs replaces the
+  // set, which restarts it, so when it does fire every light is equally old
+  // and they all go together.
+  useEffect(() => {
+    if (!Object.keys(changes).length) return undefined;
+    const timer = setTimeout(() => setChanges({}), CHANGE_HOLD_MS);
+    return () => clearTimeout(timer);
+  }, [changes]);
+
   useEffect(() => {
     if (!scoreBanner) return undefined;
     const timer = setTimeout(() => setScoreBanner(null), SCORE_BANNER_MS);
@@ -139,8 +195,16 @@ function Game() {
   const updatePlayer = (index, fields) => {
     const updates = {};
     for (const [key, value] of Object.entries(fields)) {
+      const moved = value - players[index][key];
+      if (!moved) continue;
       updates[`players/${index}/${key}`] = value;
+      // Booked before the write so the snapshot carrying it back — the local
+      // echo arrives ahead of the server's — finds it waiting.
+      ourOwnWrites.current.book(index, key, moved);
     }
+    // A tap that ran into a limit moved nothing, and writing it would fan an
+    // identical snapshot out to every device at the table for no reason.
+    if (!Object.keys(updates).length) return;
     updateGame(gameId, updates);
   };
 
@@ -211,14 +275,18 @@ function Game() {
   const endRound = () => {
     const nextRound = [...players]
       .sort((a, b) => a.spent - b.spent)
-      .map((player) => ({
-        ...player,
-        spent: 0,
-        money: Math.max(
-          player.money + incomeLevelFromSpace(player.incomePosition),
-          0
-        ),
-      }));
+      .map((player) =>
+        // The marks are laid where the new round starts, which is after the
+        // income has been collected rather than before.
+        startingRound({
+          ...player,
+          spent: 0,
+          money: Math.max(
+            player.money + incomeLevelFromSpace(player.incomePosition),
+            0
+          ),
+        })
+      );
     setAllPlayers(nextRound, "endRound");
     scrollToTurnOrder();
   };
@@ -277,7 +345,12 @@ function Game() {
             )}
           </div>
           <div className="card-body player-rows">
-            <PlayerRow label="Money" value={poundsOf(player.money)}>
+            <PlayerRow
+              label="Money"
+              value={poundsOf(player.money)}
+              change={changes[`${index}:money`]}
+              since={moneyMovedThisRound(player)}
+            >
               <button
                 className="btn btn-outline-secondary"
                 onClick={() => adjustMoney(index, -1)}
@@ -297,7 +370,11 @@ function Game() {
                 Loan
               </button>
             </PlayerRow>
-            <PlayerRow label="Spent" value={poundsOf(player.spent)}>
+            <PlayerRow
+              label="Spent"
+              value={poundsOf(player.spent)}
+              change={changes[`${index}:spent`]}
+            >
               <button
                 className="btn btn-outline-secondary"
                 onClick={() => adjustSpent(index, -1)}
@@ -320,6 +397,8 @@ function Game() {
             <PlayerRow
               label="Income"
               ariaLabel="Income Track"
+              change={changes[`${index}:incomePosition`]}
+              since={incomeMovedThisRound(player)}
               value={
                 <>
                   {poundsOf(incomeLevelFromSpace(player.incomePosition))}

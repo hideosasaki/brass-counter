@@ -23,6 +23,12 @@
             "incomePosition": {
               ".validate": "newData.isNumber() && newData.val() >= 0 && newData.val() <= 99"
             },
+            "roundStartMoney": {
+              ".validate": "newData.isNumber() && newData.val() >= 0 && newData.val() <= 999"
+            },
+            "roundStartIncomePosition": {
+              ".validate": "newData.isNumber() && newData.val() >= 0 && newData.val() <= 99"
+            },
             "$other": {
               ".validate": false
             }
@@ -89,6 +95,12 @@
                 ".validate": "newData.isNumber() && newData.val() >= 0 && newData.val() <= 999"
               },
               "incomePosition": {
+                ".validate": "newData.isNumber() && newData.val() >= 0 && newData.val() <= 99"
+              },
+              "roundStartMoney": {
+                ".validate": "newData.isNumber() && newData.val() >= 0 && newData.val() <= 999"
+              },
+              "roundStartIncomePosition": {
                 ".validate": "newData.isNumber() && newData.val() >= 0 && newData.val() <= 99"
               },
               "$other": {

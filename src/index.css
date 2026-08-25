@@ -126,6 +126,20 @@ code {
 .player-row .label {
   font-size: 0.75rem;
 }
+/* How far this number has moved since the round began, pinned to the far side
+   of its own cell. Out of flow, so it can neither widen the number's column
+   nor move the buttons, and at the far edge so that on the income row it reads
+   as a mark of its own rather than as a third figure beside the track space.
+   The sign is always written, and it sits on a plate of its own, for the same
+   reason. */
+.player-row .since {
+  --bs-badge-font-size: 0.7rem;
+  --bs-badge-font-weight: 600;
+  --bs-badge-padding-x: 0.3rem;
+  --bs-badge-padding-y: 0.15rem;
+  --bs-badge-border-radius: var(--bs-border-radius-sm);
+  font-variant-numeric: tabular-nums;
+}
 /* The number is what gives when the screen is narrow, and it does so with the
    viewport rather than at a breakpoint: 1.75rem on a 375px iPhone 8 down to
    about 1.45rem on a 320px SE. Bootstrap's own .fs-* scale is not used here
@@ -134,8 +148,35 @@ code {
    neither a carried digit nor a two-line value can move the button a thumb is
    already aimed at. */
 .player-row .value {
+  position: relative;
+  border-radius: 0.25rem;
   font-size: clamp(1.45rem, 7.5vw, 1.75rem);
   font-variant-numeric: tabular-nums;
+}
+/* A tap by somebody else at the table has to be visible without being loud, so
+   the cell holding the number washes over and drains back where it happened.
+   The cell rather than the row is not a preference: a row is display: contents
+   and has no box to paint. The wash is blue because the two colors that mean
+   something on this screen are taken — green announces the game moving
+   forward, amber warns about a destructive action — and a neighbour's tap is
+   neither. It sits behind tabular figures at a fifth opacity, so the number
+   reads the same lit as unlit.
+
+   Where motion is unwelcome the wash holds and then goes: the class comes off
+   when the light burns out, so the ending needs no animation of its own. */
+@keyframes value-changed {
+  from {
+    background-color: rgba(13, 110, 253, 0.25);
+  }
+}
+.player-row .value.changed {
+  animation: value-changed 1.6s ease-out;
+}
+@media (prefers-reduced-motion: reduce) {
+  .player-row .value.changed {
+    animation: none;
+    background-color: rgba(13, 110, 253, 0.25);
+  }
 }
 /* The track space is the number the buttons actually move, so it is watched
    while tapping and reads in the body color rather than a muted one. It is
