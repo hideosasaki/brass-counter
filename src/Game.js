@@ -27,6 +27,23 @@ const Toast = ({ className, children }) => (
   </div>
 );
 
+// One line of a player card: what the number is, the number, and the controls
+// that move it. The three rows are laid out by a grid on the card body rather
+// than by anything here, so the labels line up and so do the buttons.
+const PlayerRow = ({ label, ariaLabel, value, children }) => (
+  <div className="player-row">
+    <div className="label text-secondary">{label}</div>
+    <div className="value text-nowrap">{value}</div>
+    <div className="btn-group" role="group" aria-label={ariaLabel || label}>
+      {children}
+    </div>
+  </div>
+);
+
+// The sign belongs in front of the whole amount, not between the symbol and
+// the digits: only the income level ever goes below zero.
+const poundsOf = (amount) => (amount < 0 ? `-£${-amount}` : `£${amount}`);
+
 const undoIsFresh = (undo) =>
   undo && Date.now() - new Date(undo.at).getTime() < UNDO_WINDOW_MS;
 
@@ -247,83 +264,72 @@ function Game() {
               ></button>
             )}
           </div>
-          <div className="card-body">
-            <div className="row align-items-center mb-2">
-              <div className="col-3">Money £</div>
-              <div className="col-4 fs-2">{player.money}</div>
-              <div className="col d-grid gap-2">
-                <div className="btn-group" role="group" aria-label="Money">
-                  <button
-                    className="btn btn-outline-secondary"
-                    onClick={() => adjustMoney(index, -1)}
-                  >
-                    -
-                  </button>
-                  <button
-                    className="btn btn-secondary"
-                    onClick={() => adjustMoney(index, 1)}
-                  >
-                    +
-                  </button>
-                  <button className="btn btn-outline-secondary" onClick={() => loan(index)}>
-                    Loan
-                  </button>
-                </div>
-              </div>
-            </div>
-            <div className="row align-items-center mb-2">
-              <div className="col-3">Spent £</div>
-              <div className="col-4 fs-2">{player.spent}</div>
-              <div className="col d-grid gap-2">
-                <div className="btn-group" role="group" aria-label="Spent">
-                  <button
-                    className="btn btn-outline-secondary"
-                    onClick={() => adjustSpent(index, -1)}
-                  >
-                    -
-                  </button>
-                  <button
-                    className="btn btn-secondary"
-                    onClick={() => adjustSpent(index, 1)}
-                  >
-                    +
-                  </button>
-                  <button
-                    className="btn btn-outline-secondary"
-                    onClick={() => adjustSpent(index, 5)}
-                  >
-                    +5
-                  </button>
-                </div>
-              </div>
-            </div>
-            <div className="row align-items-center">
-              <div className="col-3">Income Track</div>
-              <div className="col-4 fs-2">
-                {player.incomePosition} = £
-                {incomeLevelFromSpace(player.incomePosition)}
-              </div>
-              <div className="col d-grid gap-2">
-                <div
-                  className="btn-group"
-                  role="group"
-                  aria-label="Income Track"
-                >
-                  <button
-                    className="btn btn-outline-secondary"
-                    onClick={() => adjustIncomePosition(index, -1)}
-                  >
-                    -
-                  </button>
-                  <button
-                    className="btn btn-secondary"
-                    onClick={() => adjustIncomePosition(index, 1)}
-                  >
-                    +
-                  </button>
-                </div>
-              </div>
-            </div>
+          <div className="card-body player-rows">
+            <PlayerRow label="Money" value={poundsOf(player.money)}>
+              <button
+                className="btn btn-outline-secondary"
+                onClick={() => adjustMoney(index, -1)}
+              >
+                -
+              </button>
+              <button
+                className="btn btn-secondary"
+                onClick={() => adjustMoney(index, 1)}
+              >
+                +
+              </button>
+              <button
+                className="btn btn-outline-secondary"
+                onClick={() => loan(index)}
+              >
+                Loan
+              </button>
+            </PlayerRow>
+            <PlayerRow label="Spent" value={poundsOf(player.spent)}>
+              <button
+                className="btn btn-outline-secondary"
+                onClick={() => adjustSpent(index, -1)}
+              >
+                -
+              </button>
+              <button
+                className="btn btn-secondary"
+                onClick={() => adjustSpent(index, 1)}
+              >
+                +
+              </button>
+              <button
+                className="btn btn-outline-secondary"
+                onClick={() => adjustSpent(index, 5)}
+              >
+                +5
+              </button>
+            </PlayerRow>
+            <PlayerRow
+              label="Income"
+              ariaLabel="Income Track"
+              value={
+                <>
+                  {poundsOf(incomeLevelFromSpace(player.incomePosition))}
+                  <span className="space ms-2">
+                    {player.incomePosition}
+                  </span>
+                </>
+              }
+            >
+              <button
+                className="btn btn-outline-secondary"
+                onClick={() => adjustIncomePosition(index, -1)}
+              >
+                -
+              </button>
+              <button
+                className="btn btn-secondary"
+                onClick={() => adjustIncomePosition(index, 1)}
+              >
+                +
+              </button>
+            </PlayerRow>
           </div>
         </div>
       ))}

@@ -103,3 +103,67 @@ code {
   font-family: source-code-pro, Menlo, Monaco, Consolas, 'Courier New',
     monospace;
 }
+
+/* The three rows of a player card share one grid, so the label column is as
+   wide as the widest label and the control column as wide as the widest set of
+   buttons — measured, not guessed at in rems. Sharing the tracks is also what
+   puts every row's "+" in the same place down the card, whether the row holds
+   two buttons or three. The rows are display: contents so their label, value
+   and buttons fall into the shared tracks; none of the geometry lives in the
+   markup. The number's column is the only one that may shrink, so a narrow
+   screen takes width from the number rather than from a target. */
+.player-rows {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 0.5rem;
+}
+.player-row {
+  display: contents;
+}
+/* The label only has to be readable, not prominent: it is the part that gives
+   up size to the targets beside it. */
+.player-row .label {
+  font-size: 0.75rem;
+}
+/* The number is what gives when the screen is narrow, and it does so with the
+   viewport rather than at a breakpoint: 1.75rem on a 375px iPhone 8 down to
+   about 1.45rem on a 320px SE. Bootstrap's own .fs-* scale is not used here
+   because it keeps scaling past those widths, which is what made the value
+   wrap in the first place. It never wraps, and its figures are tabular, so
+   neither a carried digit nor a two-line value can move the button a thumb is
+   already aimed at. */
+.player-row .value {
+  font-size: clamp(1.45rem, 7.5vw, 1.75rem);
+  font-variant-numeric: tabular-nums;
+}
+/* The track space is the number the buttons actually move, so it is watched
+   while tapping and reads in the body color rather than a muted one. It is
+   sized against the amount beside it, not in absolute terms: smaller, because
+   the pounds are what a player reads off the row, but not so small that the
+   eye has to hunt for the digit it is changing. */
+.player-row .value .space {
+  font-size: 0.65em;
+}
+/* Bootstrap gives a group's buttons flex: 1 1 auto, which divides the column
+   in proportion to their labels; a zero basis divides it evenly instead, so a
+   row with two buttons gets wider ones rather than a gap. The minimum is what
+   sizes the control column, since the column is as wide as the widest group's
+   three buttons: 52px is comfortably past the 44px touch target that sets the
+   height, and 375px has the width to pay for it. */
+.player-row .btn-group .btn {
+  flex-basis: 0;
+  min-width: 3.25rem;
+  height: 2.75rem;
+  padding-left: 0;
+  padding-right: 0;
+}
+/* Narrower than an iPhone 8 there is no longer room for both a readable number
+   and the comfortable target, so the buttons fall back to the bare 44px and
+   the number keeps its size. This is the one thing the shared grid cannot
+   resolve on its own: both columns want the same missing pixels. */
+@media (max-width: 374.98px) {
+  .player-row .btn-group .btn {
+    min-width: 2.75rem;
+  }
+}
