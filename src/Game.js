@@ -5,7 +5,8 @@ import { ref, onValue } from "firebase/database";
 import { incomeLevelFromSpace, highestSpaceOfLevel } from "./income";
 import { PLAYER_COLORS, initialPlayer, playersByIndex } from "./playerDefaults";
 import { ERA_LABELS, ERAS } from "./eras";
-import { UNDO_LABELS } from "./undoActions";
+import { UNDO_ACTIONS } from "./undoActions";
+import { TABLE_BANNER_Z, TONE_CLASSES } from "./banners";
 import DonateLink from "./DonateLink";
 import Loading from "./Loading";
 import "bootstrap/dist/css/bootstrap.min.css";
@@ -15,17 +16,27 @@ const MAX_MONEY = 100;
 const LOAN_AMOUNT = 30;
 const LOAN_INCOME_LEVEL_PENALTY = 3;
 const MIN_INCOME_LEVEL = -10;
-const UNDO_WINDOW_MS = 5000;
-const SCORE_TOAST_MS = 8000;
+const UNDO_WINDOW_MS = 8000;
+const SCORE_BANNER_MS = 8000;
 
 // A message with its action, shown to everyone at the table.
-const Toast = ({ className, children }) => (
+const Banner = ({ tone, children }) => (
   <div
-    className={`d-flex align-items-center gap-3 px-3 py-2 rounded shadow ${className}`}
+    className={`table-banner d-flex align-items-center justify-content-between gap-3 shadow ${TONE_CLASSES[tone]}`}
   >
     {children}
   </div>
 );
+
+// Ending a round reorders the seats, and the new order is only readable from
+// the top of the list, so the screen goes back up to it. Only on the device
+// that pressed the button: the write reaches everyone, but taking someone
+// else's scroll position away from them while they are reading is not ours to
+// do.
+const scrollToTurnOrder = () => {
+  const still = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+  window.scrollTo({ top: 0, behavior: still ? "auto" : "smooth" });
+};
 
 // One line of a player card: what the number is, the number, and the controls
 // that move it. The three rows are laid out by a grid on the card body rather
@@ -54,7 +65,7 @@ function Game() {
   const [linkScore, setLinkScore] = useState(null);
   const [loading, setLoading] = useState(true);
   const [undoInfo, setUndoInfo] = useState(null);
-  const [scoreToast, setScoreToast] = useState(null); // era string
+  const [scoreBanner, setScoreBanner] = useState(null); // era string
   const prevLinkScore = useRef(undefined); // undefined until first snapshot
 
   useEffect(() => {
@@ -66,11 +77,11 @@ function Game() {
         setPlayers(data.players ? Object.values(data.players) : []);
         const nextScore = data.linkScore || null;
         setLinkScore(nextScore);
-        // Toast when an era's result is first shared while this screen is
+        // Announce when an era's result is first shared while this screen is
         // open: the node newly appeared and is fresh. Later corrections only
         // rewrite the existing node and stay silent (the score view follows
         // them live). The freshness check keeps a device that joins later,
-        // where the node "appears" on the first snapshot, from toasting.
+        // where the node "appears" on the first snapshot, from announcing it.
         const prev = prevLinkScore.current;
         if (prev !== undefined) {
           for (const era of ERAS) {
@@ -78,9 +89,9 @@ function Game() {
             if (
               p &&
               !(prev && prev[era]) &&
-              Date.now() - new Date(p.at).getTime() < SCORE_TOAST_MS
+              Date.now() - new Date(p.at).getTime() < SCORE_BANNER_MS
             ) {
-              setScoreToast(era);
+              setScoreBanner(era);
             }
           }
         }
@@ -99,7 +110,7 @@ function Game() {
     return () => unsubscribe();
   }, [gameId, navigate]);
 
-  // The undo toast shows on every device at the table (the node syncs through
+  // The undo bar shows on every device at the table (the node syncs through
   // the DB), for whatever is left of the window measured from the write time.
   useEffect(() => {
     if (!undoInfo) return undefined;
@@ -110,10 +121,10 @@ function Game() {
   }, [undoInfo]);
 
   useEffect(() => {
-    if (!scoreToast) return undefined;
-    const timer = setTimeout(() => setScoreToast(null), SCORE_TOAST_MS);
+    if (!scoreBanner) return undefined;
+    const timer = setTimeout(() => setScoreBanner(null), SCORE_BANNER_MS);
     return () => clearTimeout(timer);
-  }, [scoreToast]);
+  }, [scoreBanner]);
 
   if (loading) {
     return <Loading />;
@@ -209,6 +220,7 @@ function Game() {
         ),
       }));
     setAllPlayers(nextRound, "endRound");
+    scrollToTurnOrder();
   };
 
   const addPlayer = () => {
@@ -237,7 +249,7 @@ function Game() {
 
   return (
     <div className="container">
-      <div className="row align-items-center mb-2 mt-2">
+      <div className="game-heading row align-items-center mb-2 mt-2">
         <div className="col-auto fs-2 pe-0">Game {gameId}</div>
         <div className="col-auto">
           <Link
@@ -335,7 +347,7 @@ function Game() {
       ))}
       <div className="row align-items-center mb-2 mt-2">
         <div className="col d-grid gap-2">
-          <button className="btn btn-primary" onClick={endRound}>
+          <button className="btn btn-primary end-round" onClick={endRound}>
             End Round
           </button>
           <div>
@@ -383,33 +395,34 @@ function Game() {
           Home
         </Link>
       </div>
-      {/* One bottom-anchored stack, so several live toasts stack by layout
-          instead of each one knowing the others' heights. */}
-      {(scoreToast || undoInfo) && (
-        <div
-          className="position-fixed bottom-0 start-50 translate-middle-x mb-3 d-flex flex-column align-items-center gap-2"
-          style={{ zIndex: 1080 }}
-        >
-          {scoreToast && (
-            <Toast className="bg-success text-white">
-              <span className="fw-bold text-nowrap">
-                {ERA_LABELS[scoreToast]} link points shared
+      {/* One stack across the top of the screen, so several live bars stack by
+          layout instead of each one knowing the others' heights. Fixed, so the
+          whole undo window stays reachable from any scroll position, and under
+          the connection bar, which owns the same strip. */}
+      {(scoreBanner || undoInfo) && (
+        <div className="fixed-top" style={{ zIndex: TABLE_BANNER_Z }}>
+          {scoreBanner && (
+            <Banner tone="progress">
+              <span className="message fw-bold">
+                {ERA_LABELS[scoreBanner]} link points shared
               </span>
               <button
                 className="btn btn-light"
-                onClick={() => navigate(`/game/${gameId}/score/${scoreToast}`)}
+                onClick={() => navigate(`/game/${gameId}/score/${scoreBanner}`)}
               >
                 View
               </button>
-            </Toast>
+            </Banner>
           )}
           {undoInfo && (
-            <Toast className="bg-warning fixed-light-surface">
-              <span className="fw-bold">{UNDO_LABELS[undoInfo.action]}</span>
+            <Banner tone={UNDO_ACTIONS[undoInfo.action].tone}>
+              <span className="message fw-bold">
+                {UNDO_ACTIONS[undoInfo.action].label}
+              </span>
               <button className="btn btn-dark" onClick={performUndo}>
                 Undo
               </button>
-            </Toast>
+            </Banner>
           )}
         </div>
       )}

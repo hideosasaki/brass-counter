@@ -167,3 +167,50 @@ code {
     min-width: 2.75rem;
   }
 }
+
+/* Whatever happens to the whole table arrives as a bar across the top of the
+   screen. The top is where the player who ended a round is already looking,
+   because the screen has just gone back up to the new turn order, and a bar
+   that spans the width has room for a button big enough to hit from wherever
+   the thumb was.
+
+   A bar covers what it is laid over, so the game screen keeps a strip of that
+   height at the top for it to land on: the game's name and its invite link can
+   be hidden for the seconds a bar lasts, the first player's card cannot. Both
+   the bar and the strip are --banner-height, notch included, so neither can
+   drift from the other. Reserving the space rather than pushing the page down
+   when a bar appears is deliberate — a page that shifts under a thumb mid-tap
+   is the defect the player rows were rebuilt to avoid. */
+:root {
+  --banner-height: calc(3.75rem + env(safe-area-inset-top, 0px));
+}
+.table-banner {
+  min-height: var(--banner-height);
+  padding: calc(0.5rem + env(safe-area-inset-top, 0px)) 1rem 0.5rem;
+}
+.game-heading {
+  min-height: var(--banner-height);
+}
+/* The strip only holds if the bar cannot outgrow it, so a message too long for
+   the width is clipped rather than wrapped: a bar that took a second line
+   would come down on the first player's card, which is what the strip exists
+   to keep clear. */
+.table-banner .message {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.table-banner .btn {
+  min-height: 2.75rem;
+  padding-left: 1.25rem;
+  padding-right: 1.25rem;
+}
+
+/* Ending a round is the one thing on this screen that moves the game rather
+   than corrects a number, and it is pressed once a round by whoever reaches
+   for it first. It is worth more than the 38px Bootstrap gives a button by
+   default, and more than the 44px the steppers above it settle for. */
+.end-round {
+  min-height: 3.5rem;
+}

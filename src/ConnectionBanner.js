@@ -3,15 +3,11 @@ import { useLocation } from "react-router-dom";
 import { ref, onValue } from "firebase/database";
 import { database } from "./firebaseConfig";
 import { socketReleased } from "./gameSlot";
+import { CONNECTION_BANNER_Z, TONE_CLASSES } from "./banners";
 
 // Long enough that the reconnects of an ordinary game night stay silent, short
 // enough that a player staring at a screen that will not load learns why.
 export const GRACE_MS = 5000;
-
-// Bootstrap's toast layer, which the table's own toasts already use. Above the
-// sticky totals bar at 1020 on purpose: while the app cannot reach the
-// database, why it is stuck matters more than the numbers it covers.
-const BANNER_Z = 1080;
 
 // Two things keep a device from the database, and it can tell them apart: its
 // own network being down, and the free plan's hundred simultaneous connections
@@ -55,8 +51,8 @@ function ConnectionBanner() {
   return (
     <div
       role="status"
-      className="position-fixed top-0 start-0 w-100 text-center small py-2 px-3 bg-warning fixed-light-surface"
-      style={{ zIndex: BANNER_Z }}
+      className={`position-fixed top-0 start-0 w-100 text-center small py-2 px-3 ${TONE_CLASSES.warning}`}
+      style={{ zIndex: CONNECTION_BANNER_Z }}
     >
       {reason === "offline"
         ? "You're offline. The game will catch up when you're back."

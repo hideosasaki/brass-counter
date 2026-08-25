@@ -6,7 +6,7 @@ import { generateGameId } from "./gameId";
 import { MAX_LINK_ICONS } from "./linkScoreData";
 import { PLAYER_TOKEN_CLASSES, initialPlayer } from "./playerDefaults";
 import { ERAS } from "./eras";
-import { UNDO_LABELS } from "./undoActions";
+import { UNDO_ACTIONS } from "./undoActions";
 import { MAX_SLOTS, STALE_MS } from "./gameSlot";
 
 const game = rules.rules.games.$gameId;
@@ -50,7 +50,7 @@ describe("database.rules.json mirrors the app's constants", () => {
   test("the undo node accepts exactly the undoable actions", () => {
     expect(
       accepted(game.undo.action[".validate"], /newData\.val\(\) == '(\w+)'/g)
-    ).toEqual(Object.keys(UNDO_LABELS).sort());
+    ).toEqual(Object.keys(UNDO_ACTIONS).sort());
   });
 
   // An id the rules reject is invisible from inside the app: the writes just
