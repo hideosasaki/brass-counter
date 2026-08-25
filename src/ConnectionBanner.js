@@ -3,7 +3,7 @@ import { useLocation } from "react-router-dom";
 import { ref, onValue } from "firebase/database";
 import { database } from "./firebaseConfig";
 import { socketReleased } from "./gameSlot";
-import { CONNECTION_BANNER_Z, TONE_CLASSES } from "./banners";
+import { CONNECTION_BANNER_Z, TONE_CLASSES, useLeavingBanner } from "./banners";
 
 // Long enough that the reconnects of an ordinary game night stay silent, short
 // enough that a player staring at a screen that will not load learns why.
@@ -46,15 +46,17 @@ function ConnectionBanner() {
     return () => clearTimeout(timer);
   }, [connected]);
 
-  if (!reason) return null;
+  const [showing, slide] = useLeavingBanner(reason);
+
+  if (!showing) return null;
 
   return (
     <div
       role="status"
-      className={`position-fixed top-0 start-0 w-100 text-center small py-2 px-3 ${TONE_CLASSES.warning}`}
+      className={`${slide} position-fixed top-0 start-0 w-100 text-center small py-2 px-3 ${TONE_CLASSES.warning}`}
       style={{ zIndex: CONNECTION_BANNER_Z }}
     >
-      {reason === "offline"
+      {showing === "offline"
         ? "You're offline. The game will catch up when you're back."
         : "Can't reach the game. The server may be busy, still trying."}
     </div>

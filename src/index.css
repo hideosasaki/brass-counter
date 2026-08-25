@@ -1,8 +1,8 @@
 body {
   margin: 0;
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen',
-    'Ubuntu', 'Cantarell', 'Fira Sans', 'Droid Sans', 'Helvetica Neue',
-    sans-serif;
+  font-family:
+    -apple-system, BlinkMacSystemFont, "Segoe UI", "Roboto", "Oxygen", "Ubuntu",
+    "Cantarell", "Fira Sans", "Droid Sans", "Helvetica Neue", sans-serif;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
 }
@@ -100,8 +100,8 @@ body {
 }
 
 code {
-  font-family: source-code-pro, Menlo, Monaco, Consolas, 'Courier New',
-    monospace;
+  font-family:
+    source-code-pro, Menlo, Monaco, Consolas, "Courier New", monospace;
 }
 
 /* The three rows of a player card share one grid, so the label column is as
@@ -224,13 +224,77 @@ code {
    is the defect the player rows were rebuilt to avoid. */
 :root {
   --banner-height: calc(3.75rem + env(safe-area-inset-top, 0px));
+  --phone-column: 480px;
 }
+/* The game screen is built for a phone held over the table. On a desktop it
+   becomes two of those columns rather than one wide one, at the width where two
+   cards and their gutter fit. Everything below the cards stays single file. */
+.game-shell {
+  max-width: var(--phone-column);
+}
+/* Not a Bootstrap row: its negative gutters fight the centring here, and the
+   result is a button set in from the card edge it should line up with. */
+.game-footer {
+  max-width: var(--phone-column);
+  margin-left: auto;
+  margin-right: auto;
+}
+@media (min-width: 992px) {
+  .game-shell {
+    max-width: calc(var(--phone-column) * 2 + 1rem);
+  }
+}
+
 .table-banner {
   min-height: var(--banner-height);
   padding: calc(0.5rem + env(safe-area-inset-top, 0px)) 1rem 0.5rem;
 }
+/* A bar arriving at the top of the screen covers whatever was there a moment
+   ago, so it slides in from off-screen rather than appearing over it: the
+   movement says where it came from. Every bar on that strip shares it, the
+   connection one included, so they all arrive the same way. Fast, and easing
+   hard into place: the bar is news, not a transition to sit through. */
+.banner-slide-in {
+  animation: banner-in 0.18s cubic-bezier(0.16, 1, 0.3, 1);
+}
+@keyframes banner-in {
+  from {
+    transform: translateY(-100%);
+  }
+  to {
+    transform: translateY(0);
+  }
+}
+/* It leaves the same way, back over the top edge. Held on screen for the length
+   of the slide by useLeavingBanner, and kept off at the end so it does not flash
+   back into place for the frame before it unmounts. */
+.banner-slide-in.banner-leaving {
+  animation: banner-out 0.15s cubic-bezier(0.7, 0, 0.84, 0) forwards;
+}
+@keyframes banner-out {
+  from {
+    transform: translateY(0);
+  }
+  to {
+    transform: translateY(-100%);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .banner-slide-in,
+  .banner-slide-in.banner-leaving {
+    animation: none;
+  }
+}
 .game-heading {
   min-height: var(--banner-height);
+}
+/* Pressed once at the start of a game, by someone holding the phone out to the
+   next player. Wider than Bootstrap's default so it reads as a button rather
+   than a label, but left at the default height: it is not part of counting, and
+   it sits beside the game code, not over it. */
+.invite {
+  padding-left: 1.25rem;
+  padding-right: 1.25rem;
 }
 /* The strip only holds if the bar cannot outgrow it, so a message too long for
    the width is clipped rather than wrapped: a bar that took a second line

@@ -3,6 +3,7 @@ import { render, screen, act } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 import { onValue } from "firebase/database";
 import ConnectionBanner, { GRACE_MS } from "./ConnectionBanner";
+import { BANNER_SLIDE_MS } from "./banners";
 import { socketReleased } from "./gameSlot";
 
 jest.mock("./firebaseConfig", () => ({ database: {} }));
@@ -80,8 +81,21 @@ test("clears itself once the game is reachable again", () => {
   report(false);
   tick(GRACE_MS);
   report(true);
+  tick(BANNER_SLIDE_MS);
 
   expect(screen.queryByRole("status")).not.toBeInTheDocument();
+});
+
+// The bar leaves the way it arrived, which means it has to outlive the reason
+// it was showing for as long as it takes to slide back off the top.
+test("holds the bar on screen while it slides away", () => {
+  show();
+  report(false);
+  tick(GRACE_MS);
+  report(true);
+  tick(BANNER_SLIDE_MS - 1);
+
+  expect(screen.getByRole("status")).toHaveClass("banner-leaving");
 });
 
 // A full table drops the socket on purpose. Warning that the database cannot be
