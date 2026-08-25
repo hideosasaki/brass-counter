@@ -56,7 +56,7 @@ function Invite() {
           {copied ? "Link copied" : "Send the link"}
         </button>
         <button
-          className="btn btn-primary btn-lg"
+          className="btn btn-primary btn-lg screen-action"
           onClick={() => navigate(`/game/${gameId}`)}
         >
           {state?.fresh ? "Start playing" : "Back to game"}

@@ -131,14 +131,26 @@ code {
    nor move the buttons, and at the far edge so that on the income row it reads
    as a mark of its own rather than as a third figure beside the track space.
    The sign is always written, and it sits on a plate of its own, for the same
-   reason. */
+   reason. The plate is coloured by that sign as well, out of the same tokens
+   the rest of the screen uses: at this size the lone minus is easy to miss, and
+   the colour is read before the glyph. It stays a second reading of the sign
+   rather than the only one, so a player who cannot tell the two plates apart
+   loses nothing. */
 .player-row .since {
-  --bs-badge-font-size: 0.7rem;
+  --bs-badge-font-size: 0.8rem;
   --bs-badge-font-weight: 600;
   --bs-badge-padding-x: 0.3rem;
   --bs-badge-padding-y: 0.15rem;
   --bs-badge-border-radius: var(--bs-border-radius-sm);
   font-variant-numeric: tabular-nums;
+}
+.player-row .since.up {
+  background-color: var(--up-bg);
+  color: var(--up-ink);
+}
+.player-row .since.down {
+  background-color: var(--brick-bg);
+  color: var(--brick-ink);
 }
 /* The number is what gives when the screen is narrow, and it does so with the
    viewport rather than at a breakpoint: 1.75rem on a 375px iPhone 8 down to
@@ -157,16 +169,16 @@ code {
    the cell holding the number washes over and drains back where it happened.
    The cell rather than the row is not a preference: a row is display: contents
    and has no box to paint. The wash is blue because the two colors that mean
-   something on this screen are taken — green announces the game moving
-   forward, amber warns about a destructive action — and a neighbour's tap is
-   neither. It sits behind tabular figures at a fifth opacity, so the number
+   something on this screen are taken — the canal green announces the game
+   moving forward, iron warns about a destructive action — and a neighbour's
+   tap is neither. It sits behind tabular figures at a fifth opacity, so the number
    reads the same lit as unlit.
 
    Where motion is unwelcome the wash holds and then goes: the class comes off
    when the light burns out, so the ending needs no animation of its own. */
 @keyframes value-changed {
   from {
-    background-color: rgba(13, 110, 253, 0.25);
+    background-color: var(--wash);
   }
 }
 .player-row .value.changed {
@@ -175,7 +187,7 @@ code {
 @media (prefers-reduced-motion: reduce) {
   .player-row .value.changed {
     animation: none;
-    background-color: rgba(13, 110, 253, 0.25);
+    background-color: var(--wash);
   }
 }
 /* The track space is the number the buttons actually move, so it is watched
@@ -198,6 +210,14 @@ code {
   height: 2.75rem;
   padding-left: 0;
   padding-right: 0;
+  font-weight: 700;
+}
+/* The two signs are read as symbols rather than as words, so they are set like
+   the ones on the score screen: the same weight as the labelled buttons beside
+   them, at the size a symbol needs to be read as one. */
+.player-row .btn-group .step {
+  font-size: 1.25rem;
+  line-height: 1;
 }
 /* Narrower than an iPhone 8 there is no longer room for both a readable number
    and the comfortable target, so the buttons fall back to the bare 44px and
@@ -225,6 +245,176 @@ code {
 :root {
   --banner-height: calc(3.75rem + env(safe-area-inset-top, 0px));
   --phone-column: 480px;
+}
+
+/* The four player colors are the physical tokens and cannot move, so the rest
+   of the screen moves to meet them. They take violet, yellow, off-white and
+   brick between them, which leaves the blue-green side of the wheel free. The
+   canal end of it is the one that carries: it belongs to the board without
+   competing with any token, and it is also what the game moving forward should
+   look like, so the same colour serves the buttons and the bar that announces
+   a round ended. A bar announcing something destroyed cannot then be that
+   colour, and the tokens have taken every warm one, so it is iron instead. */
+:root {
+  --brand-rgb: 31, 111, 107;
+  --brand: rgb(var(--brand-rgb));
+  --brand-hover: #1a5d5a;
+  --brand-active: #154c49;
+  --brand-ink: #fff;
+  --slate-rgb: 83, 98, 96;
+  --slate: rgb(var(--slate-rgb));
+  --slate-hover: #445150;
+  --slate-ink: #fff;
+  --progress: var(--brand);
+  --caution: #2f4858;
+  --bar-ink: #fff;
+  --up-bg: #d8e8e5;
+  --up-ink: #14504c;
+  --brick-bg: #f1dfd8;
+  --brick-ink: #7a2f18;
+  --wash: rgba(45, 105, 140, 0.25);
+  /* Bootstrap paints .text-primary and its focus rings from these, so the
+     spinner on the scan screen and every ring follow the brand as well. */
+  --bs-primary: var(--brand);
+  --bs-primary-rgb: var(--brand-rgb);
+  --bs-focus-ring-color: rgba(var(--brand-rgb), 0.25);
+}
+[data-bs-theme="dark"] {
+  --brand-rgb: 79, 163, 155;
+  --brand-hover: #63b1a9;
+  --brand-active: #78bfb8;
+  --brand-ink: #0c2422;
+  --slate-rgb: 143, 156, 154;
+  --slate-hover: #a0acaa;
+  --slate-ink: #121a19;
+  /* The one token that is not simply the light value lightened: a bar filling
+     the width of a dark screen carries further than a button does, so it is
+     held back from the brand. */
+  --progress: #2b7a74;
+  --caution: #3b586b;
+  --bar-ink: #fff;
+  --up-bg: #1e3634;
+  --up-ink: #8fcac2;
+  --brick-bg: #3a281f;
+  --brick-ink: #e3ab93;
+  --wash: rgba(110, 170, 205, 0.28);
+}
+
+.btn-primary {
+  --bs-btn-focus-shadow-rgb: var(--brand-rgb);
+  --bs-btn-bg: var(--brand);
+  --bs-btn-border-color: var(--brand);
+  --bs-btn-color: var(--brand-ink);
+  --bs-btn-hover-bg: var(--brand-hover);
+  --bs-btn-hover-border-color: var(--brand-hover);
+  --bs-btn-hover-color: var(--brand-ink);
+  --bs-btn-active-bg: var(--brand-active);
+  --bs-btn-active-border-color: var(--brand-active);
+  --bs-btn-active-color: var(--brand-ink);
+  --bs-btn-disabled-bg: var(--brand);
+  --bs-btn-disabled-border-color: var(--brand);
+  --bs-btn-disabled-color: var(--brand-ink);
+}
+.btn-outline-primary {
+  --bs-btn-focus-shadow-rgb: var(--brand-rgb);
+  --bs-btn-color: var(--brand);
+  --bs-btn-border-color: var(--brand);
+  --bs-btn-hover-bg: var(--brand);
+  --bs-btn-hover-border-color: var(--brand);
+  --bs-btn-hover-color: var(--brand-ink);
+  --bs-btn-active-bg: var(--brand);
+  --bs-btn-active-border-color: var(--brand);
+  --bs-btn-active-color: var(--brand-ink);
+  --bs-btn-disabled-color: var(--brand);
+}
+/* The one control Bootstrap paints from literals rather than from a variable,
+   so overriding --bs-primary does not reach it: the select on the score screen
+   would keep flashing the default blue when focused. */
+.form-select:focus {
+  border-color: var(--brand);
+  box-shadow: 0 0 0 0.25rem rgba(var(--brand-rgb), 0.25);
+}
+
+/* The four totals on the score screen are what the table looks at while the
+   icons are counted, so they are the largest numbers on it. One column per
+   seat and no wrapping: the type scales with the viewport instead, sized so
+   that two digits still fit side by side on a 320px screen. */
+.link-totals {
+  display: grid;
+  grid-auto-flow: column;
+  grid-auto-columns: 1fr;
+  gap: 0.5rem;
+}
+.link-totals .seat {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  min-width: 0;
+}
+.link-totals .swatch {
+  width: 100%;
+  height: 6px;
+  border-radius: 3px;
+  margin-bottom: 0.15rem;
+}
+.link-totals .score {
+  font-size: clamp(1.75rem, 10vw, 2.5rem);
+  font-weight: 700;
+  line-height: 1.05;
+  font-variant-numeric: tabular-nums;
+}
+.link-totals .unit {
+  font-size: 0.7rem;
+  letter-spacing: 0.06em;
+  line-height: 1.2;
+  color: var(--bs-secondary-color);
+}
+
+/* Something went wrong while reading the board. Bootstrap's warning yellow is
+   the yellow player's colour, so this borrows the plate the minus badge wears
+   instead: the same brick, in both themes. */
+.alert-warning {
+  --bs-alert-bg: var(--brick-bg);
+  --bs-alert-color: var(--brick-ink);
+  --bs-alert-border-color: color-mix(in srgb, var(--brick-ink) 25%, transparent);
+}
+
+/* The steppers are pressed far more often than anything else here, so they are
+   the one place the brand colour would shout. They stay neutral, tinted just
+   enough to belong to it. */
+.btn-secondary {
+  --bs-btn-focus-shadow-rgb: var(--slate-rgb);
+  --bs-btn-bg: var(--slate);
+  --bs-btn-border-color: var(--slate);
+  --bs-btn-color: var(--slate-ink);
+  --bs-btn-hover-bg: var(--slate-hover);
+  --bs-btn-hover-border-color: var(--slate-hover);
+  --bs-btn-hover-color: var(--slate-ink);
+  --bs-btn-active-bg: var(--slate-hover);
+  --bs-btn-active-border-color: var(--slate-hover);
+  --bs-btn-active-color: var(--slate-ink);
+}
+.btn-outline-secondary {
+  --bs-btn-focus-shadow-rgb: var(--slate-rgb);
+  --bs-btn-color: var(--slate);
+  --bs-btn-border-color: var(--slate);
+  --bs-btn-hover-bg: var(--slate);
+  --bs-btn-hover-border-color: var(--slate);
+  --bs-btn-hover-color: var(--slate-ink);
+  --bs-btn-active-bg: var(--slate);
+  --bs-btn-active-border-color: var(--slate);
+  --bs-btn-active-color: var(--slate-ink);
+}
+/* The two plates a bar can wear. Both are dark in both themes, so the button
+   sitting on them is light either way and the text never has to be checked
+   against a player's colour. */
+.bar-progress {
+  background-color: var(--progress);
+  color: var(--bar-ink);
+}
+.bar-caution {
+  background-color: var(--caution);
+  color: var(--bar-ink);
 }
 /* The game screen is built for a phone held over the table. On a desktop it
    becomes two of those columns rather than one wide one, at the width where two
@@ -312,10 +502,11 @@ code {
   padding-right: 1.25rem;
 }
 
-/* Ending a round is the one thing on this screen that moves the game rather
-   than corrects a number, and it is pressed once a round by whoever reaches
-   for it first. It is worth more than the 38px Bootstrap gives a button by
-   default, and more than the 44px the steppers above it settle for. */
-.end-round {
+/* The button that finishes what a screen was opened for: ending the round, and
+   getting back to the table from the invite and score screens. Pressed once by
+   whoever reaches for it first, so it is worth more than the 38px Bootstrap
+   gives a button by default, and more than the 44px the steppers settle for.
+   Bootstrap's btn-lg sets the type; only the height is ours. */
+.screen-action {
   min-height: 3.5rem;
 }

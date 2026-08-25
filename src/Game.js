@@ -67,7 +67,11 @@ const PlayerRow = ({ label, ariaLabel, value, change, since, children }) => (
       {/* Zero is not worth printing: a player who has not moved this number
           reads the same with nothing there. */}
       {!!since && (
-        <span className="since badge bg-secondary-subtle text-body position-absolute top-50 end-0 translate-middle-y">
+        <span
+          className={`since badge position-absolute top-50 end-0 translate-middle-y ${
+            since > 0 ? "up" : "down"
+          }`}
+        >
           {since > 0 ? `+${since}` : since}
         </span>
       )}
@@ -364,13 +368,13 @@ function Game() {
                   since={moneyMovedThisRound(player)}
                 >
                   <button
-                    className="btn btn-outline-secondary"
+                    className="btn step btn-outline-secondary"
                     onClick={() => adjustMoney(index, -1)}
                   >
-                    -
+                    −
                   </button>
                   <button
-                    className="btn btn-secondary"
+                    className="btn step btn-secondary"
                     onClick={() => adjustMoney(index, 1)}
                   >
                     +
@@ -388,13 +392,13 @@ function Game() {
                   change={changes[`${index}:spent`]}
                 >
                   <button
-                    className="btn btn-outline-secondary"
+                    className="btn step btn-outline-secondary"
                     onClick={() => adjustSpent(index, -1)}
                   >
-                    -
+                    −
                   </button>
                   <button
-                    className="btn btn-secondary"
+                    className="btn step btn-secondary"
                     onClick={() => adjustSpent(index, 1)}
                   >
                     +
@@ -421,13 +425,13 @@ function Game() {
                   }
                 >
                   <button
-                    className="btn btn-outline-secondary"
+                    className="btn step btn-outline-secondary"
                     onClick={() => adjustIncomePosition(index, -1)}
                   >
-                    -
+                    −
                   </button>
                   <button
-                    className="btn btn-secondary"
+                    className="btn step btn-secondary"
                     onClick={() => adjustIncomePosition(index, 1)}
                   >
                     +
@@ -442,7 +446,10 @@ function Game() {
           does: these are read and pressed one at a time. */}
       <div className="game-footer">
         <div className="d-grid gap-2 mb-2 mt-2">
-          <button className="btn btn-primary end-round" onClick={endRound}>
+          <button
+            className="btn btn-primary btn-lg screen-action"
+            onClick={endRound}
+          >
             End Round
           </button>
           <div>
@@ -524,7 +531,7 @@ function Game() {
                 {UNDO_ACTIONS[shownUndo.action].label}
               </span>
               <button
-                className="btn btn-dark"
+                className="btn btn-light"
                 onClick={() => {
                   dismissUndo();
                   performUndo();

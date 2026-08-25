@@ -216,7 +216,7 @@ function Scan() {
         </div>
         <div className="d-grid gap-2">
           <button
-            className="btn btn-primary btn-lg"
+            className="btn btn-primary btn-lg screen-action"
             onClick={() => fileInput.current.click()}
           >
             Take a photo
@@ -260,7 +260,7 @@ function Scan() {
           {STAGES.map(([s, label], i) => (
             <li key={s} className="list-group-item d-flex align-items-center gap-2">
               {i < reached ? (
-                <span className="text-success">✓</span>
+                <span className="text-primary">✓</span>
               ) : i === reached ? (
                 <span className="spinner-border spinner-border-sm text-primary" />
               ) : (
@@ -336,7 +336,10 @@ function Scan() {
           })}
         </div>
         <div className="d-grid gap-2">
-          <button className="btn btn-primary btn-lg" onClick={shareAndOpen}>
+          <button
+            className="btn btn-primary btn-lg screen-action"
+            onClick={shareAndOpen}
+          >
             Count the points
           </button>
           <button className="btn btn-outline-secondary" onClick={() => goTo({ phase: "setup" })}>

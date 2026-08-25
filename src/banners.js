@@ -15,8 +15,8 @@ export const TABLE_BANNER_Z = CONNECTION_BANNER_Z - 1;
 // game moving forward. Kept out of undoActions.js, which is the set of action
 // names the database rules accept and has no business naming a stylesheet.
 export const TONE_CLASSES = {
-  progress: "bg-success text-white",
-  warning: "bg-warning fixed-light-surface",
+  progress: "bar-progress",
+  warning: "bar-caution",
 };
 
 // How long the slide out takes. The stylesheet runs the animation and this

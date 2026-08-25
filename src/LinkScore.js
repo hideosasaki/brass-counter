@@ -196,20 +196,19 @@ function LinkScore() {
         <small className="text-secondary fs-6">{eraTitle(era)}</small>
       </h4>
 
-      {/* Totals stay visible while icon counts are entered below. */}
+      {/* Totals stay visible while icon counts are entered below. One column per
+          seat, so the numbers are read across rather than hunted for, and each
+          keeps its own player's colour as a bar above it. */}
       <div
-        className="sticky-top bg-body border-bottom d-flex flex-wrap align-items-center gap-3 py-2"
+        className="sticky-top bg-body border-bottom link-totals py-2"
         style={{ zIndex: 1020 }}
       >
         {sessionClasses.map((cls) => (
-          <span key={cls} className="d-flex align-items-baseline gap-1">
-            <span
-              className="d-inline-block rounded align-self-center"
-              style={{ width: 16, height: 16, backgroundColor: CLASS_HEX[cls] }}
-            />
-            <span className="fs-4 fw-bold">{totals[cls] || 0}</span>
-            <span className="small text-secondary">VP</span>
-          </span>
+          <div key={cls} className="seat">
+            <span className="swatch" style={{ backgroundColor: CLASS_HEX[cls] }} />
+            <span className="score">{totals[cls] || 0}</span>
+            <span className="unit">VP</span>
+          </div>
         ))}
       </div>
 
@@ -304,7 +303,10 @@ function LinkScore() {
         </ol>
       </div>
       <div className="d-grid">
-        <button className="btn btn-primary" onClick={() => navigate(`/game/${gameId}`)}>
+        <button
+          className="btn btn-primary btn-lg screen-action"
+          onClick={() => navigate(`/game/${gameId}`)}
+        >
           Back to game
         </button>
       </div>
